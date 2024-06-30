@@ -1,4 +1,8 @@
+use keeper_crabby::start;
+
 fn main() {
-    let crabby = "crab";
-    println!("Hello, {}!", crabby);
+    match start() {
+        Ok(_) => {}
+        Err(e) => eprintln!("Error: {}", e),
+    }
 }

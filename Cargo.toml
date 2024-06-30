@@ -1,6 +1,7 @@
 [package]
-name = "tcpr"
+name = "keeper-crabby"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+ratatui = "0.27.0"
