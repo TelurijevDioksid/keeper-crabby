@@ -12,7 +12,7 @@ use ratatui::{Frame, Terminal};
 use std::error::Error;
 use std::io;
 
-use crate::Application;
+use crate::{db::init, Application};
 
 pub mod states;
 
@@ -59,6 +59,13 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut Application) -> io:
 }
 
 pub fn start() -> Result<(), Box<dyn Error>> {
+    match init() {
+        Ok(path) => {
+            // todo
+        }
+        Err(e) => eprintln!("Error: {}", e),
+    }
+
     enable_raw_mode()?;
 
     let mut stdout = io::stdout();
