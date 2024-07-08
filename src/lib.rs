@@ -1,5 +1,7 @@
 mod ui;
 
+mod db;
+
 pub use ui::start;
 use ui::states::{LoginState, ScreenState};
 
