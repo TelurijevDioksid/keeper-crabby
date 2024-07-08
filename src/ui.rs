@@ -11,8 +11,9 @@ use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::{Frame, Terminal};
 use std::error::Error;
 use std::io;
+use std::path::PathBuf;
 
-use crate::{db::init, Application};
+use crate::Application;
 
 pub mod states;
 
@@ -58,14 +59,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut Application) -> io:
     }
 }
 
-pub fn start() -> Result<(), Box<dyn Error>> {
-    match init() {
-        Ok(path) => {
-            // todo
-        }
-        Err(e) => eprintln!("Error: {}", e),
-    }
-
+pub fn start(db_path: PathBuf) -> Result<(), Box<dyn Error>> {
     enable_raw_mode()?;
 
     let mut stdout = io::stdout();
@@ -74,7 +68,7 @@ pub fn start() -> Result<(), Box<dyn Error>> {
     let beckend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(beckend)?;
 
-    let mut app = Application::new();
+    let mut app = Application::new(db_path);
     let _res = run_app(&mut terminal, &mut app);
 
     disable_raw_mode()?;
