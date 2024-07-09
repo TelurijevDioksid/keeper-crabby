@@ -37,6 +37,22 @@ pub fn ui(f: &mut Frame, _app: &Application) {
     .block(title_block);
 
     f.render_widget(title, chunks[0]);
+
+    match &_app.state {
+        states::ScreenState::Login(state) => {
+            let login_block = Block::default()
+                .borders(Borders::ALL)
+                .style(Style::default());
+
+            let login = Paragraph::new(Text::styled(
+                &state.username,
+                Style::default().fg(Color::White),
+            ))
+            .block(login_block);
+
+            f.render_widget(login, chunks[1]);
+        }
+    }
 }
 
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut Application) -> io::Result<bool> {
@@ -47,10 +63,13 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut Application) -> io:
             if key.kind == event::KeyEventKind::Release {
                 continue;
             }
-            match app.state {
-                states::ScreenState::Login(_) => match key.code {
+            match &mut app.state {
+                states::ScreenState::Login(state) => match key.code {
                     event::KeyCode::Char('q') => {
                         break Ok(false);
+                    }
+                    event::KeyCode::Char(value) => {
+                        state.username_append(value);
                     }
                     _ => {}
                 },

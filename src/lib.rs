@@ -2,10 +2,13 @@ mod ui;
 
 mod db;
 
+mod crypto;
+
 use std::path::PathBuf;
 
 pub use ui::start;
-pub use db::init as db_init;
+pub use db::{init as db_init, create_file};
+pub use crypto::hash;
 use ui::states::{LoginState, ScreenState};
 
 pub struct Application {

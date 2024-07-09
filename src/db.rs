@@ -1,6 +1,6 @@
 use directories::ProjectDirs;
 use std::{
-    fs, io,
+    fs::{self, File}, io,
     path::{Path, PathBuf},
 };
 
@@ -34,5 +34,18 @@ pub fn init() -> Result<PathBuf, io::Error> {
         Ok(proj_dirs.to_path_buf())
     } else {
         panic!("Could not get project directories");
+    }
+}
+
+pub fn create_file(p: &PathBuf, file_name: &str) -> io::Result<PathBuf> {
+    let file_path = p.join(file_name);
+    if !file_path.exists() {
+        File::create(file_path.as_path())?;
+        return Ok(file_path);
+    } else {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "File already exists",
+        ));
     }
 }
