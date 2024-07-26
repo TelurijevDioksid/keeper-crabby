@@ -1,26 +1,40 @@
-mod ui;
-
-mod db;
+use std::path::PathBuf;
+use ui::{login_state::Login, popup::Popup, states::ScreenState};
 
 mod crypto;
+mod db;
+mod ui;
 
-use std::path::PathBuf;
-
-pub use ui::start;
-pub use db::{init as db_init, create_file};
 pub use crypto::hash;
-use ui::states::{LoginState, ScreenState};
+pub use db::{create_file, init as db_init};
+pub use ui::start;
 
-pub struct Application {
+pub struct Application {}
+
+pub struct ImutableAppState<'a> {
+    pub name: &'a str,
     pub db_path: PathBuf,
-    pub state: ScreenState,
+}
+
+#[derive(Clone)]
+pub struct MutableAppState {
+    pub popups: Vec<Box<dyn Popup>>,
+    pub running: bool,
 }
 
 impl Application {
-    pub fn new(db_path: PathBuf) -> Self {
-        Application {
+    fn create(db_path: PathBuf) -> (ImutableAppState<'static>, MutableAppState, ScreenState) {
+        let imutable_app_state = ImutableAppState {
+            name: "Keeper Crabby",
             db_path,
-            state: ScreenState::Login(LoginState::new()),
-        }
+        };
+
+        let mutable_app_state = MutableAppState {
+            popups: Vec::new(),
+            running: true,
+        };
+
+        let state = ScreenState::Login(Login::new());
+        (imutable_app_state, mutable_app_state, state)
     }
 }

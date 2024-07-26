@@ -1,12 +1,9 @@
-use super::login_state::Login;
-use crate::{ImutableAppState, MutableAppState};
+use dyn_clone::DynClone;
 use ratatui::{crossterm::event::KeyEvent, layout::Rect, Frame};
 
-pub enum ScreenState {
-    Login(Login),
-}
+use crate::{ImutableAppState, MutableAppState};
 
-pub trait State {
+pub trait Popup: DynClone {
     fn render(
         &self,
         f: &mut Frame,
@@ -16,8 +13,10 @@ pub trait State {
     );
     fn handle_key(
         &mut self,
-        key: KeyEvent,
         immutable_state: &ImutableAppState,
         mutable_state: &MutableAppState,
+        key: &KeyEvent,
     ) -> MutableAppState;
 }
+
+dyn_clone::clone_trait_object!(Popup);
