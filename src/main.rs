@@ -1,4 +1,4 @@
-use keeper_crabby::{start, db_init};
+use keeper_crabby::{db_init, start};
 
 fn main() {
     let db_path = db_init().unwrap();

@@ -1,6 +1,7 @@
 use directories::ProjectDirs;
 use std::{
-    fs::{self, File}, io,
+    fs::{self, File},
+    io,
     path::{Path, PathBuf},
 };
 

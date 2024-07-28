@@ -1,8 +1,8 @@
-use sha2::{Sha256, Digest};
 use aes_gcm_siv::{
     aead::{self, consts::U12, generic_array::GenericArray, Aead, KeyInit, OsRng},
     Aes128GcmSiv, Key, Nonce,
 };
+use sha2::{Digest, Sha256};
 
 pub struct CipherConfig {
     pub key: Key<Aes128GcmSiv>,
@@ -22,7 +22,11 @@ pub fn encrypt_data(data: &str) -> Result<CipherConfig, aead::Error> {
     let cipher = Aes128GcmSiv::new(&key);
     let nonce = Nonce::from_slice(b"unique nonce");
     let ciphertext = cipher.encrypt(nonce, data.as_bytes())?;
-    return Ok(CipherConfig { key, nonce: *nonce, ciphertext });
+    return Ok(CipherConfig {
+        key,
+        nonce: *nonce,
+        ciphertext,
+    });
 }
 
 pub fn decrypt_data(config: &CipherConfig) -> Result<String, aead::Error> {
@@ -31,5 +35,3 @@ pub fn decrypt_data(config: &CipherConfig) -> Result<String, aead::Error> {
     let result = String::from_utf8(plaintext).unwrap();
     return Ok(result);
 }
-
-
