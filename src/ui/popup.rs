@@ -1,7 +1,7 @@
 use dyn_clone::DynClone;
 use ratatui::{crossterm::event::KeyEvent, layout::Rect, Frame};
 
-use crate::{ImutableAppState, MutableAppState};
+use crate::{ui::states::ScreenState, ImutableAppState, MutableAppState};
 
 pub trait Popup: DynClone {
     fn render(
@@ -16,7 +16,7 @@ pub trait Popup: DynClone {
         immutable_state: &ImutableAppState,
         mutable_state: &MutableAppState,
         key: &KeyEvent,
-    ) -> MutableAppState;
+    ) -> (MutableAppState, Option<ScreenState>);
 }
 
 dyn_clone::clone_trait_object!(Popup);

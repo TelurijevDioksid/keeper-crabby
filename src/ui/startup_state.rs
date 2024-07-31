@@ -1,0 +1,165 @@
+use ratatui::{
+    crossterm::event::{KeyCode, KeyEvent},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Color, Style, Stylize},
+    text::{Line, Span},
+    widgets::{Block, Borders, Padding, Paragraph},
+    Frame,
+};
+
+use crate::{
+    ui::{
+        centered_rect,
+        states::{ScreenState, State},
+    },
+    ImutableAppState, MutableAppState,
+};
+
+#[derive(Clone)]
+pub enum StartUpState {
+    Login,
+    Register,
+    Quit,
+}
+
+#[derive(Clone)]
+pub struct StartUp {
+    pub state: StartUpState,
+}
+
+impl StartUp {
+    pub fn new() -> Self {
+        StartUp {
+            state: StartUpState::Login,
+        }
+    }
+
+    pub fn new_with_state(state: StartUpState) -> Self {
+        StartUp { state }
+    }
+}
+
+impl State for StartUp {
+    fn render(
+        &self,
+        f: &mut Frame,
+        _immutable_state: &ImutableAppState,
+        _mutable_state: &MutableAppState,
+        rect: Rect,
+    ) {
+        let wrapper = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::White))
+            .title(" Welcome ")
+            .title_style(Style::default().fg(Color::White));
+        let rect = centered_rect(rect, 50, 40);
+        f.render_widget(wrapper, rect);
+
+        let rect = centered_rect(rect, 94, 80);
+        let layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(vec![
+                Constraint::Ratio(1, 3),
+                Constraint::Ratio(1, 3),
+                Constraint::Ratio(1, 3),
+            ])
+            .split(rect);
+
+        let text = vec![Line::from(vec![Span::raw("Login")])];
+        let login_p = Paragraph::new(text)
+            .block(
+                Block::bordered()
+                    .border_style(Style::default().fg(match self.state {
+                        StartUpState::Login => Color::White,
+                        _ => Color::DarkGray,
+                    }))
+                    .padding(Padding::new(1, 0, layout[0].height / 4, 0)),
+            )
+            .style(Style::new().white())
+            .alignment(Alignment::Left);
+
+        let text = vec![Line::from(vec![Span::raw("Register")])];
+        let register_p = Paragraph::new(text)
+            .block(
+                Block::bordered()
+                    .border_style(Style::default().fg(match self.state {
+                        StartUpState::Register => Color::White,
+                        _ => Color::DarkGray,
+                    }))
+                    .padding(Padding::new(1, 0, layout[1].height / 4, 0)),
+            )
+            .style(Style::new().white())
+            .alignment(Alignment::Left);
+
+        let text = vec![Line::from(vec![Span::raw("Quit")])];
+        let quit_p = Paragraph::new(text)
+            .block(
+                Block::bordered()
+                    .border_style(Style::default().fg(match self.state {
+                        StartUpState::Quit => Color::White,
+                        _ => Color::DarkGray,
+                    }))
+                    .padding(Padding::new(1, 0, layout[2].height / 4, 0)),
+            )
+            .style(Style::new().white())
+            .alignment(Alignment::Left);
+
+        f.render_widget(login_p, layout[0]);
+        f.render_widget(register_p, layout[1]);
+        f.render_widget(quit_p, layout[2]);
+    }
+
+    fn handle_key(
+        &mut self,
+        key: KeyEvent,
+        _immutable_state: &ImutableAppState,
+        mutable_state: &MutableAppState,
+    ) -> (MutableAppState, ScreenState) {
+        let mut mutable_state = mutable_state.clone();
+        let mut screen_state = ScreenState::StartUp(self.clone());
+        match key.code {
+            KeyCode::Char('q') => {
+                mutable_state.running = false;
+            }
+            KeyCode::Char('j') | KeyCode::Down => match self.state {
+                StartUpState::Login => {
+                    screen_state =
+                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Register));
+                }
+                StartUpState::Register => {
+                    screen_state =
+                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Quit));
+                }
+                StartUpState::Quit => {
+                    screen_state =
+                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Login));
+                }
+            },
+            KeyCode::Char('k') | KeyCode::Up => match self.state {
+                StartUpState::Login => {
+                    screen_state =
+                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Quit));
+                }
+                StartUpState::Register => {
+                    screen_state =
+                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Login));
+                }
+                StartUpState::Quit => {
+                    screen_state =
+                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Register));
+                }
+            },
+            KeyCode::Enter => match self.state {
+                StartUpState::Login => {
+                    screen_state = ScreenState::Login(super::login_state::Login::new());
+                }
+                StartUpState::Register => {}
+                StartUpState::Quit => {
+                    mutable_state.running = false;
+                }
+            },
+            _ => {}
+        }
+        (mutable_state, screen_state)
+    }
+}

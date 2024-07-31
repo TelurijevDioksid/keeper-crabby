@@ -5,15 +5,21 @@ use ratatui::{
     Frame,
 };
 
-use crate::{ImutableAppState, MutableAppState};
+use crate::{
+    ui::{
+        exit_popup::Exit,
+        states::{ScreenState, State},
+    },
+    ImutableAppState, MutableAppState,
+};
 
-use super::{exit_popup::Exit, states::State};
-
+#[derive(Clone)]
 pub enum LoginState {
     Username,
     MasterPassword,
 }
 
+#[derive(Clone)]
 pub struct Login {
     pub username: String,
     pub master_password: String,
@@ -36,9 +42,7 @@ impl Login {
     pub fn master_password_pop(&mut self) {
         self.master_password.pop();
     }
-}
 
-impl Login {
     pub fn new() -> Self {
         Login {
             username: String::new(),
@@ -65,8 +69,9 @@ impl State for Login {
         key: KeyEvent,
         _immutable_state: &ImutableAppState,
         mutable_state: &MutableAppState,
-    ) -> MutableAppState {
+    ) -> (MutableAppState, ScreenState) {
         let mut mutable_state = mutable_state.clone();
+        let screen_state = ScreenState::Login(self.clone());
         match self.state {
             LoginState::Username => match key.code {
                 KeyCode::Enter => {
@@ -99,6 +104,6 @@ impl State for Login {
                 _ => {}
             },
         }
-        mutable_state
+        (mutable_state, screen_state)
     }
 }

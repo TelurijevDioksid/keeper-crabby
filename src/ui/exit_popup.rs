@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::{ImutableAppState, MutableAppState};
 
-use super::popup::Popup;
+use super::{popup::Popup, states::ScreenState};
 
 #[derive(Clone)]
 pub struct Exit {}
@@ -40,7 +40,7 @@ impl Popup for Exit {
         _immutable_state: &ImutableAppState,
         mutable_state: &MutableAppState,
         key: &KeyEvent,
-    ) -> MutableAppState {
+    ) -> (MutableAppState, Option<ScreenState>) {
         let mut mutable_state = mutable_state.clone();
         match key.code {
             KeyCode::Char('q') => {
@@ -48,6 +48,6 @@ impl Popup for Exit {
             }
             _ => {}
         }
-        mutable_state
+        (mutable_state, None)
     }
 }
