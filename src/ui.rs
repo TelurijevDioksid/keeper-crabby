@@ -19,6 +19,7 @@ pub mod states;
 
 pub mod exit_popup;
 pub mod login_state;
+pub mod startup_state;
 
 pub fn ui(
     f: &mut Frame,
@@ -36,6 +37,7 @@ pub fn ui(
     let rect = centered_rect(f.size(), 97, 94);
     match &curr_state {
         ScreenState::Login(s) => s.render(f, immutable_state, mutable_state, rect),
+        ScreenState::StartUp(s) => s.render(f, immutable_state, mutable_state, rect),
     }
     for popup in &mutable_state.popups {
         let rect = centered_rect(f.size(), 50, 50);
@@ -50,6 +52,7 @@ fn run_app<B: Backend>(
     curr_state: &mut ScreenState,
 ) -> io::Result<bool> {
     let mut ms_curr = mutable_state.clone();
+    let mut cs_curr = curr_state.clone();
     loop {
         let should_break = !ms_curr.running;
 
@@ -57,26 +60,36 @@ fn run_app<B: Backend>(
             break;
         }
 
-        terminal.draw(|f| ui(f, immutable_state, &ms_curr, curr_state))?;
+        terminal.draw(|f| ui(f, immutable_state, &ms_curr, &cs_curr))?;
 
         if let Event::Key(key) = event::read()? {
             if key.kind == event::KeyEventKind::Release {
                 continue;
             }
-            let mscopy = ms_curr.clone();
+            let ms: MutableAppState;
+            let mut cs = cs_curr.clone();
             let amount_of_popups = ms_curr.popups.len();
             if amount_of_popups > 0 {
+                let maybe_cs: Option<ScreenState>;
+                let mscopy = ms_curr.clone();
                 let last_popup = ms_curr.popups.len() - 1;
-                let ms = ms_curr.popups[last_popup].handle_key(immutable_state, &mscopy, &key);
-                ms_curr = ms;
+                (ms, maybe_cs) =
+                    ms_curr.popups[last_popup].handle_key(immutable_state, &mscopy, &key);
+                if maybe_cs.is_some() {
+                    cs = maybe_cs.unwrap();
+                }
             } else {
-                match curr_state {
+                match &mut cs_curr {
                     states::ScreenState::Login(s) => {
-                        let ms = s.handle_key(key, immutable_state, &ms_curr);
-                        ms_curr = ms;
+                        (ms, cs) = s.handle_key(key, immutable_state, &ms_curr);
+                    }
+                    states::ScreenState::StartUp(s) => {
+                        (ms, cs) = s.handle_key(key, immutable_state, &ms_curr);
                     }
                 }
             }
+            ms_curr = ms;
+            cs_curr = cs;
         }
     }
     Ok(true)

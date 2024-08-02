@@ -1,9 +1,13 @@
-use super::login_state::Login;
-use crate::{ImutableAppState, MutableAppState};
+use crate::{
+    ui::{login_state::Login, startup_state::StartUp},
+    ImutableAppState, MutableAppState,
+};
 use ratatui::{crossterm::event::KeyEvent, layout::Rect, Frame};
 
+#[derive(Clone)]
 pub enum ScreenState {
     Login(Login),
+    StartUp(StartUp),
 }
 
 pub trait State {
@@ -19,5 +23,5 @@ pub trait State {
         key: KeyEvent,
         immutable_state: &ImutableAppState,
         mutable_state: &MutableAppState,
-    ) -> MutableAppState;
+    ) -> (MutableAppState, ScreenState);
 }

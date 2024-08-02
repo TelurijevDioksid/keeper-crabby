@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use ui::{login_state::Login, popup::Popup, states::ScreenState};
+use ui::{popup::Popup, startup_state::StartUp, states::ScreenState};
 
 mod crypto;
 mod db;
@@ -34,7 +34,7 @@ impl Application {
             running: true,
         };
 
-        let state = ScreenState::Login(Login::new());
+        let state = ScreenState::StartUp(StartUp::new());
         (imutable_app_state, mutable_app_state, state)
     }
 }
