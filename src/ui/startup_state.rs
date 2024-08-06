@@ -47,25 +47,17 @@ impl State for StartUp {
         _mutable_state: &MutableAppState,
         rect: Rect,
     ) {
-        let wrapper = Block::default()
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::White))
-            .title(" Welcome ")
-            .title_style(Style::default().fg(Color::White));
         let rect = centered_rect(rect, 50, 40);
-        f.render_widget(wrapper, rect);
-
-        let rect = centered_rect(rect, 94, 80);
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![
-                Constraint::Ratio(1, 3),
-                Constraint::Ratio(1, 3),
-                Constraint::Ratio(1, 3),
+                Constraint::Length(5),
+                Constraint::Length(5),
+                Constraint::Length(5),
             ])
             .split(rect);
 
-        let text = vec![Line::from(vec![Span::raw("Login")])];
+        let text = vec![Line::from(vec!["Login".into()])];
         let login_p = Paragraph::new(text)
             .block(
                 Block::bordered()
@@ -78,7 +70,7 @@ impl State for StartUp {
             .style(Style::new().white())
             .alignment(Alignment::Left);
 
-        let text = vec![Line::from(vec![Span::raw("Register")])];
+        let text = vec![Line::from(vec!["Register".into()])];
         let register_p = Paragraph::new(text)
             .block(
                 Block::bordered()
@@ -91,7 +83,7 @@ impl State for StartUp {
             .style(Style::new().white())
             .alignment(Alignment::Left);
 
-        let text = vec![Line::from(vec![Span::raw("Quit")])];
+        let text = vec![Line::from(vec!["Quit".into()])];
         let quit_p = Paragraph::new(text)
             .block(
                 Block::bordered()
