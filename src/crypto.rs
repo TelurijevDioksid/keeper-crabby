@@ -40,9 +40,8 @@ pub fn key_from_master_pwd(master_pwd: &str) -> [u8; 16] {
 }
 
 pub fn encrypt_data(data: &str, master_pwd: &str) -> Result<CipherConfig, aead::Error> {
-    let derived_key = key_from_master_pwd(master_pwd);
-    let test = Aes128GcmSiv::generate_key(&mut OsRng);
-    let key = Key::<Aes128GcmSiv>::clone_from_slice(&derived_key);
+    let key = key_from_master_pwd(master_pwd);
+    let key = Key::<Aes128GcmSiv>::clone_from_slice(&key);
     let cipher = Aes128GcmSiv::new(&key);
     let nonce = Aes128GcmSiv::generate_nonce(&mut OsRng);
     let ciphertext = cipher.encrypt(&nonce, data.as_bytes())?;
