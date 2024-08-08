@@ -11,6 +11,7 @@ pub use ui::start;
 
 pub struct Application {}
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct ImutableAppState<'a> {
     pub name: &'a str,
     pub db_path: PathBuf,

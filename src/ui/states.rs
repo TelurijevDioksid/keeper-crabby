@@ -4,10 +4,13 @@ use crate::{
 };
 use ratatui::{crossterm::event::KeyEvent, layout::Rect, Frame};
 
+use super::register_state::Register;
+
 #[derive(Clone)]
 pub enum ScreenState {
     Login(Login),
     StartUp(StartUp),
+    Register(Register),
 }
 
 pub trait State {
