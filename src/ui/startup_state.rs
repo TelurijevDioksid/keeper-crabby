@@ -11,6 +11,8 @@ use crate::{
     ui::{
         centered_rect,
         states::{ScreenState, State},
+        login_state::Login,
+        register_state::Register,
     },
     ImutableAppState, MutableAppState,
 };
@@ -109,6 +111,7 @@ impl State for StartUp {
     ) -> (MutableAppState, ScreenState) {
         let mut mutable_state = mutable_state.clone();
         let mut screen_state = ScreenState::StartUp(self.clone());
+
         match key.code {
             KeyCode::Char('q') => {
                 mutable_state.running = false;
@@ -143,15 +146,18 @@ impl State for StartUp {
             },
             KeyCode::Enter => match self.state {
                 StartUpState::Login => {
-                    screen_state = ScreenState::Login(super::login_state::Login::new());
+                    screen_state = ScreenState::Login(Login::new());
                 }
-                StartUpState::Register => {}
+                StartUpState::Register => {
+                    screen_state = ScreenState::Register(Register::new());
+                }
                 StartUpState::Quit => {
                     mutable_state.running = false;
                 }
             },
             _ => {}
         }
+
         (mutable_state, screen_state)
     }
 }

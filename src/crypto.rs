@@ -4,6 +4,7 @@ use aes_gcm_siv::{
 };
 use sha2::{Digest, Sha256};
 
+#[derive(Debug, Clone, PartialEq)]
 pub struct CipherConfig {
     pub key: Key<Aes128GcmSiv>,
     pub nonce: GenericArray<u8, U12>,

@@ -19,6 +19,7 @@ pub mod states;
 
 pub mod exit_popup;
 pub mod login_state;
+pub mod register_state;
 pub mod startup_state;
 
 pub fn ui(
@@ -38,6 +39,7 @@ pub fn ui(
     match &curr_state {
         ScreenState::Login(s) => s.render(f, immutable_state, mutable_state, rect),
         ScreenState::StartUp(s) => s.render(f, immutable_state, mutable_state, rect),
+        ScreenState::Register(s) => s.render(f, immutable_state, mutable_state, rect),
     }
     for popup in &mutable_state.popups {
         let rect = centered_rect(f.size(), 50, 50);
@@ -84,6 +86,9 @@ fn run_app<B: Backend>(
                         (ms, cs) = s.handle_key(key, immutable_state, &ms_curr);
                     }
                     states::ScreenState::StartUp(s) => {
+                        (ms, cs) = s.handle_key(key, immutable_state, &ms_curr);
+                    }
+                    states::ScreenState::Register(s) => {
                         (ms, cs) = s.handle_key(key, immutable_state, &ms_curr);
                     }
                 }
