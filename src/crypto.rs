@@ -1,8 +1,12 @@
 use aes_gcm_siv::{
-    aead::{self, consts::U12, generic_array::GenericArray, Aead, KeyInit, OsRng},
-    Aes128GcmSiv, Key, Nonce,
+    aead::{self, consts::U12, generic_array::GenericArray, Aead, KeyInit, OsRng}, AeadCore, Aes128GcmSiv, Key, KeySizeUser, Nonce
 };
-use sha2::{Digest, Sha256};
+use scrypt::{
+    password_hash::SaltString,
+    scrypt,
+    Params,
+};
+use sha2::{digest::generic_array::sequence::GenericSequence, Digest, Sha256};
 
 pub struct CipherConfig {
     pub key: Key<Aes128GcmSiv>,
@@ -17,14 +21,33 @@ pub fn hash(data: String) -> String {
     format!("{:x}", result)
 }
 
-pub fn encrypt_data(data: &str) -> Result<CipherConfig, aead::Error> {
-    let key = Aes128GcmSiv::generate_key(&mut OsRng);
+pub fn key_from_master_pwd(master_pwd: &str) -> [u8; 16] {
+    let salt = SaltString::generate(&mut OsRng);
+    let salt = salt.as_str().as_bytes();
+    let mut derived_key = [0u8; 16];
+    scrypt(
+        &master_pwd.as_bytes(),
+        &salt,
+        &Params::new(
+            14 as u8,
+            8 as u32,
+            1 as u32,
+            16 as usize,
+        ).unwrap(),
+        &mut derived_key,
+    ).unwrap();
+    return derived_key;
+}
+
+pub fn encrypt_data(data: &str, master_pwd: &str) -> Result<CipherConfig, aead::Error> {
+    let key = key_from_master_pwd(master_pwd);
+    let key = Key::<Aes128GcmSiv>::clone_from_slice(&key);
     let cipher = Aes128GcmSiv::new(&key);
-    let nonce = Nonce::from_slice(b"unique nonce");
-    let ciphertext = cipher.encrypt(nonce, data.as_bytes())?;
+    let nonce = Aes128GcmSiv::generate_nonce(&mut OsRng);
+    let ciphertext = cipher.encrypt(&nonce, data.as_bytes())?;
     return Ok(CipherConfig {
         key,
-        nonce: *nonce,
+        nonce,
         ciphertext,
     });
 }
@@ -35,3 +58,4 @@ pub fn decrypt_data(config: &CipherConfig) -> Result<String, aead::Error> {
     let result = String::from_utf8(plaintext).unwrap();
     return Ok(result);
 }
+
