@@ -13,13 +13,13 @@ use crate::{
     ImutableAppState, MutableAppState,
 };
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LoginState {
     Username,
     MasterPassword,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Login {
     pub username: String,
     pub master_password: String,
