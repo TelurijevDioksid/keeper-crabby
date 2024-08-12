@@ -2,8 +2,8 @@ use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style, Stylize},
-    text::{Line, Span},
-    widgets::{Block, Borders, Padding, Paragraph},
+    text::Line,
+    widgets::{Block, Padding, Paragraph},
     Frame,
 };
 
