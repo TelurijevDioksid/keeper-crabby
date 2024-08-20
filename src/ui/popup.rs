@@ -10,13 +10,17 @@ pub trait Popup: DynClone {
         immutable_state: &ImutableAppState,
         mutable_state: &MutableAppState,
         rect: Rect,
+        current_state: &ScreenState,
     );
     fn handle_key(
         &mut self,
         immutable_state: &ImutableAppState,
         mutable_state: &MutableAppState,
         key: &KeyEvent,
+        previous_state: &ScreenState,
     ) -> (MutableAppState, Option<ScreenState>);
+
+    fn wrapper(&self, rect: Rect) -> Rect;
 }
 
 dyn_clone::clone_trait_object!(Popup);

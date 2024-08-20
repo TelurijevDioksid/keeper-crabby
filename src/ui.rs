@@ -18,6 +18,9 @@ pub mod popup;
 pub mod states;
 
 pub mod exit_popup;
+pub mod insert_pwd_popup;
+pub mod message_popup;
+
 pub mod login_state;
 pub mod register_state;
 pub mod startup_state;
@@ -42,8 +45,13 @@ pub fn ui(
         ScreenState::Register(s) => s.render(f, immutable_state, mutable_state, rect),
     }
     for popup in &mutable_state.popups {
-        let rect = centered_rect(f.size(), 50, 50);
-        popup.render(f, immutable_state, mutable_state, rect);
+        popup.render(
+            f,
+            immutable_state,
+            mutable_state,
+            popup.wrapper(rect),
+            curr_state,
+        );
     }
 }
 
@@ -76,7 +84,7 @@ fn run_app<B: Backend>(
                 let mscopy = ms_curr.clone();
                 let last_popup = ms_curr.popups.len() - 1;
                 (ms, maybe_cs) =
-                    ms_curr.popups[last_popup].handle_key(immutable_state, &mscopy, &key);
+                    ms_curr.popups[last_popup].handle_key(immutable_state, &mscopy, &key, &cs_curr);
                 if maybe_cs.is_some() {
                     cs = maybe_cs.unwrap();
                 }

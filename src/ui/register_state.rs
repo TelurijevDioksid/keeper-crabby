@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
     layout::{Constraint, Direction, Layout, Rect},
@@ -8,6 +10,8 @@ use ratatui::{
 };
 
 use crate::{
+    crypto::CreateUserConfig,
+    ui::insert_pwd_popup::{DomainPwdInsert, InsertPwd},
     ui::{centered_rect, startup_state::StartUp, states::ScreenState, State},
     ImutableAppState, MutableAppState,
 };
@@ -19,6 +23,8 @@ pub enum RegisterState {
     ConfirmMasterPassword,
     Quit,
     Confirm,
+    Domain,
+    Pwd,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -27,15 +33,21 @@ pub struct Register {
     pub master_password: String,
     pub confirm_master_password: String,
     pub state: RegisterState,
+    pub domain: String,
+    pub pwd: String,
+    pub path: PathBuf,
 }
 
 impl Register {
-    pub fn new() -> Self {
+    pub fn new(path: &PathBuf) -> Self {
         Register {
             username: String::new(),
             master_password: String::new(),
             confirm_master_password: String::new(),
             state: RegisterState::Username,
+            domain: String::new(),
+            pwd: String::new(),
+            path: path.clone(),
         }
     }
 
@@ -45,6 +57,9 @@ impl Register {
             master_password: self.master_password.clone(),
             confirm_master_password: self.confirm_master_password.clone(),
             state,
+            domain: self.domain.clone(),
+            pwd: self.pwd.clone(),
+            path: self.path.clone(),
         }
     }
 
@@ -70,6 +85,44 @@ impl Register {
 
     pub fn confirm_master_password_pop(&mut self) {
         self.confirm_master_password.pop();
+    }
+}
+
+impl DomainPwdInsert for Register {
+    fn set_pwd(&self, pwd: String) -> Register {
+        let mut ss = self.clone();
+        ss.pwd = pwd;
+        ss
+    }
+
+    fn set_domain(&self, domain: String) -> Register {
+        let mut ss = self.clone();
+        ss.domain = domain;
+        ss
+    }
+
+    fn confirm(&self) -> Result<(), String> {
+        if self.master_password != self.confirm_master_password {
+            return Err("Could not create user.".to_string());
+        }
+
+        let config = CreateUserConfig::new(
+            &self.username,
+            &self.master_password,
+            &self.domain,
+            &self.pwd,
+            self.path.clone(),
+        );
+
+        // first need to validate config
+        // match config.validate() ...
+
+        let res = config.create_user();
+
+        match res {
+            Ok(_) => Ok(()),
+            Err(e) => Err(e),
+        }
     }
 }
 
@@ -156,7 +209,7 @@ impl State for Register {
         _immutable_state: &ImutableAppState,
         mutable_state: &MutableAppState,
     ) -> (MutableAppState, ScreenState) {
-        let mutable_state = mutable_state.clone();
+        let mut mutable_state = mutable_state.clone();
         let mut screen_state = ScreenState::Register(self.clone());
 
         match self.state {
@@ -244,8 +297,7 @@ impl State for Register {
             },
             RegisterState::Confirm => match key.code {
                 KeyCode::Enter => {
-                    // todo: save the user
-                    screen_state = ScreenState::StartUp(StartUp::new());
+                    mutable_state.popups.push(Box::new(InsertPwd::new()));
                 }
                 KeyCode::Right | KeyCode::Left => {
                     screen_state = ScreenState::Register(self.copy_with_state(RegisterState::Quit));
@@ -261,6 +313,7 @@ impl State for Register {
                 }
                 _ => {}
             },
+            _ => {}
         }
 
         (mutable_state, screen_state)

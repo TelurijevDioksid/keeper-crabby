@@ -90,19 +90,19 @@ impl CreateUserConfig<'_> {
         let res = create_file(&self.path, hashed_username.as_str());
         let file_path = match res {
             Ok(path) => path,
-            Err(e) => return Err(e.to_string()),
+            Err(_) => return Err("Could not create user.".to_string()),
         };
         let data = format!("{} {}", self.domain, self.pwd);
 
         let cipher = encrypt_data(&data, self.master_pwd);
         let cipher = match cipher {
             Ok(cipher) => cipher,
-            Err(e) => return Err(e.to_string()),
+            Err(_) => return Err("Could not create user.".to_string()),
         };
         let res = cipher.write_to_file(file_path);
         match res {
             Ok(_) => Ok(()),
-            Err(e) => Err(e.to_string()),
+            Err(_) => Err("Could not create user.".to_string()),
         }
     }
 }

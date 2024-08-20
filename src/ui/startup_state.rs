@@ -10,9 +10,9 @@ use ratatui::{
 use crate::{
     ui::{
         centered_rect,
-        states::{ScreenState, State},
         login_state::Login,
         register_state::Register,
+        states::{ScreenState, State},
     },
     ImutableAppState, MutableAppState,
 };
@@ -106,12 +106,14 @@ impl State for StartUp {
     fn handle_key(
         &mut self,
         key: KeyEvent,
-        _immutable_state: &ImutableAppState,
+        immutable_state: &ImutableAppState,
         mutable_state: &MutableAppState,
     ) -> (MutableAppState, ScreenState) {
         let mut mutable_state = mutable_state.clone();
         let mut screen_state = ScreenState::StartUp(self.clone());
 
+        // this needs to be refactored
+        // first needs to match the state and then the key
         match key.code {
             KeyCode::Char('q') => {
                 mutable_state.running = false;
@@ -149,7 +151,7 @@ impl State for StartUp {
                     screen_state = ScreenState::Login(Login::new());
                 }
                 StartUpState::Register => {
-                    screen_state = ScreenState::Register(Register::new());
+                    screen_state = ScreenState::Register(Register::new(&immutable_state.db_path));
                 }
                 StartUpState::Quit => {
                     mutable_state.running = false;
