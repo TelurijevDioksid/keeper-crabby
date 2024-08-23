@@ -6,16 +6,23 @@ use ratatui::{
     Frame,
 };
 
-use crate::{ImutableAppState, MutableAppState};
-
-use super::{popup::Popup, states::ScreenState};
+use crate::{
+    ui::{centered_rect, popup::Popup, states::ScreenState},
+    ImutableAppState, MutableAppState,
+};
 
 #[derive(Clone)]
-pub struct Exit {}
+pub struct Exit {
+    x_percent: u16,
+    y_percent: u16,
+}
 
 impl Exit {
     pub fn new() -> Self {
-        Exit {}
+        Exit {
+            x_percent: 50,
+            y_percent: 50,
+        }
     }
 }
 
@@ -26,6 +33,7 @@ impl Popup for Exit {
         _immutable_state: &ImutableAppState,
         _mutable_state: &MutableAppState,
         rect: Rect,
+        _current_state: &ScreenState,
     ) {
         let block = Block::default()
             .title("Press q to exit")
@@ -40,6 +48,7 @@ impl Popup for Exit {
         _immutable_state: &ImutableAppState,
         mutable_state: &MutableAppState,
         key: &KeyEvent,
+        _previous_state: &ScreenState,
     ) -> (MutableAppState, Option<ScreenState>) {
         let mut mutable_state = mutable_state.clone();
         match key.code {
@@ -49,5 +58,9 @@ impl Popup for Exit {
             _ => {}
         }
         (mutable_state, None)
+    }
+
+    fn wrapper(&self, rect: Rect) -> Rect {
+        centered_rect(rect, self.x_percent, self.y_percent)
     }
 }
