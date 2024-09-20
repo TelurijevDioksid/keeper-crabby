@@ -148,7 +148,7 @@ impl State for StartUp {
             },
             KeyCode::Enter => match self.state {
                 StartUpState::Login => {
-                    screen_state = ScreenState::Login(Login::new());
+                    screen_state = ScreenState::Login(Login::new(&immutable_state.db_path));
                 }
                 StartUpState::Register => {
                     screen_state = ScreenState::Register(Register::new(&immutable_state.db_path));

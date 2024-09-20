@@ -255,11 +255,10 @@ impl Popup for InsertPwd {
                             }
                             Err(e) => {
                                 mutable_state.popups.push(Box::new(MessagePopup::new(e, |_immutable_state: &ImutableAppState<'_>, mutable_state: &MutableAppState, _screen_state: &ScreenState| {
-                                let mut mutable_state = mutable_state.clone();
-                                mutable_state.popups.pop();
-                                (mutable_state, None)
-                            }
-                                )));
+                                    let mut mutable_state = mutable_state.clone();
+                                    mutable_state.popups.pop();
+                                    (mutable_state, None)
+                                })));
                             }
                         },
                         _ => {}
