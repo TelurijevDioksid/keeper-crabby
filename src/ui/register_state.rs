@@ -21,10 +21,10 @@ pub enum RegisterState {
     Username,
     MasterPassword,
     ConfirmMasterPassword,
-    Quit,
-    Confirm,
     Domain,
     Pwd,
+    Confirm,
+    Quit,
 }
 
 #[derive(Debug, Clone, PartialEq)]
