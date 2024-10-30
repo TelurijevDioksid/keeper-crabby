@@ -14,6 +14,7 @@ use crate::{
     crypto::{check_user, CipherConfig},
     ui::{
         centered_rect,
+        home_state::{Home, Position},
         message_popup::MessagePopup,
         startup_state::StartUp,
         states::{ScreenState, State},
@@ -233,16 +234,20 @@ impl State for Login {
                 KeyCode::Enter => {
                     let data = self.login();
                     match data {
-                        Ok(_) => {
-                            // handle login
+                        Ok(d) => {
+                            screen_state = ScreenState::Home(Home::new(
+                                d,
+                                Position::default(),
+                                _immutable_state.rect.unwrap(),
+                            ));
                         }
                         Err(e) => {
                             mutable_state.popups.push(Box::new(MessagePopup::new(
                                 e,
-                                |_, muttable_state: &MutableAppState, _| {
-                                    let mut muttable_state = muttable_state.clone();
-                                    muttable_state.popups.pop();
-                                    (muttable_state, None)
+                                |_, mutable_state: &MutableAppState, _| {
+                                    let mut mutable_state = mutable_state.clone();
+                                    mutable_state.popups.pop();
+                                    (mutable_state, None)
                                 },
                             )));
                         }

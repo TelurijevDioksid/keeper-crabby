@@ -1,3 +1,4 @@
+use ratatui::prelude::Rect;
 use std::path::PathBuf;
 use ui::{popup::Popup, startup_state::StartUp, states::ScreenState};
 
@@ -15,6 +16,7 @@ pub struct Application {}
 pub struct ImutableAppState<'a> {
     pub name: &'a str,
     pub db_path: PathBuf,
+    pub rect: Option<Rect>,
 }
 
 #[derive(Clone)]
@@ -28,6 +30,7 @@ impl Application {
         let imutable_app_state = ImutableAppState {
             name: "Keeper Crabby",
             db_path,
+            rect: None,
         };
 
         let mutable_app_state = MutableAppState {
