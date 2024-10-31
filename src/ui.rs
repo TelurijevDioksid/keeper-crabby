@@ -16,11 +16,13 @@ use states::{ScreenState, State};
 
 pub mod popup;
 pub mod states;
+pub mod components;
 
 pub mod exit_popup;
 pub mod insert_pwd_popup;
 pub mod message_popup;
 
+pub mod home_state;
 pub mod login_state;
 pub mod register_state;
 pub mod startup_state;
@@ -31,18 +33,19 @@ pub fn ui(
     mutable_state: &MutableAppState,
     curr_state: &ScreenState,
 ) {
-    let wrapper = Rect::new(0, 0, f.size().width, f.size().height);
+    let wrapper = Rect::new(0, 0, f.area().width, f.area().height);
     f.render_widget(
         Block::default()
             .borders(Borders::ALL)
             .title(immutable_state.name),
         wrapper,
     );
-    let rect = centered_rect(f.size(), 97, 94);
+    let rect = centered_rect(f.area(), 97, 94);
     match &curr_state {
         ScreenState::Login(s) => s.render(f, immutable_state, mutable_state, rect),
         ScreenState::StartUp(s) => s.render(f, immutable_state, mutable_state, rect),
         ScreenState::Register(s) => s.render(f, immutable_state, mutable_state, rect),
+        ScreenState::Home(s) => s.render(f, immutable_state, mutable_state, rect),
     }
     for popup in &mutable_state.popups {
         popup.render(
@@ -57,7 +60,7 @@ pub fn ui(
 
 fn run_app<B: Backend>(
     terminal: &mut Terminal<B>,
-    immutable_state: &ImutableAppState,
+    immutable_state: &mut ImutableAppState,
     mutable_state: &mut MutableAppState,
     curr_state: &mut ScreenState,
 ) -> io::Result<bool> {
@@ -99,11 +102,15 @@ fn run_app<B: Backend>(
                     states::ScreenState::Register(s) => {
                         (ms, cs) = s.handle_key(key, immutable_state, &ms_curr);
                     }
+                    states::ScreenState::Home(s) => {
+                        (ms, cs) = s.handle_key(key, immutable_state, &ms_curr);
+                    }
                 }
             }
             ms_curr = ms;
             cs_curr = cs;
         }
+        immutable_state.rect = Some(terminal.get_frame().area());
     }
     Ok(true)
 }
@@ -137,10 +144,11 @@ pub fn start(db_path: PathBuf) -> Result<(), Box<dyn Error>> {
     let beckend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(beckend)?;
 
-    let (imutable_app_state, mut mutable_app_state, mut state) = Application::create(db_path);
+    let (mut imutable_app_state, mut mutable_app_state, mut state) = Application::create(db_path);
+    imutable_app_state.rect = Some(terminal.get_frame().area());
     let _res = run_app(
         &mut terminal,
-        &imutable_app_state,
+        &mut imutable_app_state,
         &mut mutable_app_state,
         &mut state,
     );
