@@ -110,52 +110,54 @@ impl State for StartUp {
         let mut mutable_state = mutable_state.clone();
         let mut screen_state = ScreenState::StartUp(self.clone());
 
-        // this needs to be refactored
-        // first needs to match the state and then the key
-        match key.code {
-            KeyCode::Char('q') => {
-                mutable_state.running = false;
-            }
-            KeyCode::Char('j') | KeyCode::Down => match self.state {
-                StartUpState::Login => {
-                    screen_state =
-                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Register));
-                }
-                StartUpState::Register => {
-                    screen_state =
-                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Quit));
-                }
-                StartUpState::Quit => {
-                    screen_state =
-                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Login));
-                }
-            },
-            KeyCode::Char('k') | KeyCode::Up => match self.state {
-                StartUpState::Login => {
-                    screen_state =
-                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Quit));
-                }
-                StartUpState::Register => {
-                    screen_state =
-                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Login));
-                }
-                StartUpState::Quit => {
-                    screen_state =
-                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Register));
-                }
-            },
-            KeyCode::Enter => match self.state {
-                StartUpState::Login => {
+        if key.code == KeyCode::Char('q') {
+            mutable_state.running = false;
+            return (mutable_state, screen_state);
+        }
+
+        match self.state {
+            StartUpState::Login => match key.code {
+                KeyCode::Enter => {
                     screen_state = ScreenState::Login(Login::new(&immutable_state.db_path));
                 }
-                StartUpState::Register => {
+                KeyCode::Down | KeyCode::Tab | KeyCode::Char('j') => {
+                    screen_state =
+                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Register));
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    screen_state =
+                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Quit));
+                }
+                _ => {}
+            },
+            StartUpState::Register => match key.code {
+                KeyCode::Enter => {
                     screen_state = ScreenState::Register(Register::new(&immutable_state.db_path));
                 }
-                StartUpState::Quit => {
+                KeyCode::Down | KeyCode::Tab | KeyCode::Char('j') => {
+                    screen_state =
+                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Quit));
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    screen_state =
+                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Login));
+                }
+                _ => {}
+            },
+            StartUpState::Quit => match key.code {
+                KeyCode::Enter => {
                     mutable_state.running = false;
                 }
+                KeyCode::Down | KeyCode::Tab | KeyCode::Char('j') => {
+                    screen_state =
+                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Login));
+                }
+                KeyCode::Up | KeyCode::Char('k') => {
+                    screen_state =
+                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Register));
+                }
+                _ => {}
             },
-            _ => {}
         }
 
         (mutable_state, screen_state)
