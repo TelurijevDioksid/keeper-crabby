@@ -170,7 +170,7 @@ impl State for Login {
     fn handle_key(
         &mut self,
         key: KeyEvent,
-        _immutable_state: &ImutableAppState,
+        immutable_state: &ImutableAppState,
         mutable_state: &MutableAppState,
     ) -> (MutableAppState, ScreenState) {
         let mut mutable_state = mutable_state.clone();
@@ -240,7 +240,7 @@ impl State for Login {
                             screen_state = ScreenState::Home(Home::new(
                                 d,
                                 Position::default(),
-                                _immutable_state.rect.unwrap(),
+                                immutable_state.rect.unwrap(),
                             ));
                         }
                         Err(e) => {

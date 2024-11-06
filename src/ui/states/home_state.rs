@@ -242,11 +242,11 @@ impl State for Home {
     fn render(
         &self,
         f: &mut Frame,
-        _immutable_state: &ImutableAppState,
+        immutable_state: &ImutableAppState,
         _mutable_state: &MutableAppState,
         area: Rect,
     ) {
-        match _immutable_state.rect {
+        match immutable_state.rect {
             Some(_) => {
                 let mut buffer = f.buffer_mut();
                 let buffer_to_render = self.buffer_to_render();
@@ -259,19 +259,19 @@ impl State for Home {
     fn handle_key(
         &mut self,
         key: KeyEvent,
-        _immutable_state: &ImutableAppState,
+        immutable_state: &ImutableAppState,
         mutable_state: &MutableAppState,
     ) -> (MutableAppState, ScreenState) {
         // TODO: rework this
         let mut screen_state = ScreenState::Home(self.clone());
         if key.code == KeyCode::Char('q') {
-            screen_state = ScreenState::Login(Login::new(&_immutable_state.db_path));
+            screen_state = ScreenState::Login(Login::new(&immutable_state.db_path));
         }
         if key.code == KeyCode::Char('j') {
-            screen_state = ScreenState::Home(self.down(_immutable_state.rect.unwrap()));
+            screen_state = ScreenState::Home(self.down(immutable_state.rect.unwrap()));
         }
         if key.code == KeyCode::Char('k') {
-            screen_state = ScreenState::Home(self.up(_immutable_state.rect.unwrap()));
+            screen_state = ScreenState::Home(self.up(immutable_state.rect.unwrap()));
         }
         if key.code == KeyCode::Char('h') {
             if self.position.offset_x != 0 {
@@ -280,7 +280,7 @@ impl State for Home {
                         offset_x: self.position.offset_x - 1,
                         offset_y: self.position.offset_y,
                     },
-                    _immutable_state.rect.unwrap(),
+                    immutable_state.rect.unwrap(),
                 ));
             }
         }
@@ -295,7 +295,7 @@ impl State for Home {
                         offset_x: self.position.offset_x + 1,
                         offset_y: self.position.offset_y,
                     },
-                    _immutable_state.rect.unwrap(),
+                    immutable_state.rect.unwrap(),
                 ));
             }
         }
