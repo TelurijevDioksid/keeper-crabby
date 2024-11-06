@@ -102,9 +102,8 @@ impl Home {
     }
 
     fn scroll_to_bottom(&self, area: Rect) -> Self {
-        let max_offset_y = self.buffer_to_render().area().height
-            - ScrollView::inner_buffer_bounding_box(area).1
-            + 1;
+        let (_, inner_buffer_height) = ScrollView::inner_buffer_bounding_box(area);
+        let max_offset_y = self.buffer_to_render().area().height - inner_buffer_height + 1;
         Self {
             secrets: Secrets {
                 secrets: self.secrets.secrets.clone(),
@@ -125,11 +124,11 @@ impl Home {
         area: Rect,
     ) -> Self {
         assert!(selected_secret < self.secrets.secrets.len());
-        let bounding_box = ScrollView::inner_buffer_bounding_box(area);
+        let (_, inner_buffer_height) = ScrollView::inner_buffer_bounding_box(area);
         let mut position = self.position.clone();
         if selected_secret > previous_selected_secret {
             if selected_secret as u16 * DOMAIN_PWD_LIST_ITEM_HEIGHT + 1
-                >= bounding_box.1 + position.offset_y
+                >= inner_buffer_height + position.offset_y
             {
                 position.offset_y += DOMAIN_PWD_LIST_ITEM_HEIGHT;
             }
