@@ -14,10 +14,12 @@ use crate::{
     crypto::{check_user, CipherConfig},
     ui::{
         centered_rect,
-        home_state::{Home, Position},
-        message_popup::MessagePopup,
-        startup_state::StartUp,
-        states::{ScreenState, State},
+        popups::message_popup::MessagePopup,
+        states::{
+            home_state::{Home, Position},
+            startup_state::StartUp,
+            ScreenState, State,
+        },
     },
     ImutableAppState, MutableAppState,
 };

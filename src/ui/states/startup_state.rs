@@ -10,9 +10,7 @@ use ratatui::{
 use crate::{
     ui::{
         centered_rect,
-        login_state::Login,
-        register_state::Register,
-        states::{ScreenState, State},
+        states::{login_state::Login, register_state::Register, ScreenState, State},
     },
     ImutableAppState, MutableAppState,
 };

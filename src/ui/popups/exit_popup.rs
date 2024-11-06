@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::{
-    ui::{centered_rect, popup::Popup, states::ScreenState},
+    ui::{centered_rect, popups::Popup, states::ScreenState},
     ImutableAppState, MutableAppState,
 };
 

@@ -11,8 +11,14 @@ use ratatui::{
 
 use crate::{
     crypto::CreateUserConfig,
-    ui::insert_pwd_popup::{DomainPwdInsert, InsertPwd},
-    ui::{centered_rect, startup_state::StartUp, states::ScreenState, State},
+    ui::{
+        popups::insert_pwd_popup::{DomainPwdInsert, InsertPwd},
+        {
+            centered_rect,
+            states::{startup_state::StartUp, ScreenState},
+            State,
+        },
+    },
     ImutableAppState, MutableAppState,
 };
 

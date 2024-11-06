@@ -9,8 +9,9 @@ use ratatui::{
 
 use crate::{
     ui::{
-        centered_rect, message_popup::MessagePopup, popup::Popup, startup_state::StartUp,
-        states::ScreenState,
+        centered_rect,
+        popups::{message_popup::MessagePopup, Popup},
+        states::{startup_state::StartUp, ScreenState},
     },
     ImutableAppState, MutableAppState,
 };

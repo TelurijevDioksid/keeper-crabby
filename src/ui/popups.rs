@@ -3,6 +3,10 @@ use ratatui::{crossterm::event::KeyEvent, layout::Rect, Frame};
 
 use crate::{ui::states::ScreenState, ImutableAppState, MutableAppState};
 
+pub mod exit_popup;
+pub mod insert_pwd_popup;
+pub mod message_popup;
+
 pub trait Popup: DynClone {
     fn render(
         &self,

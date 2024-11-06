@@ -10,7 +10,10 @@ use ratatui::{
 };
 
 use crate::{
-    ui::{components::scrollable_view::ScrollView, login_state::Login, states::State},
+    ui::{
+        components::scrollable_view::ScrollView,
+        states::{login_state::Login, State},
+    },
     ImutableAppState, MutableAppState, ScreenState,
 };
 

@@ -1,6 +1,10 @@
 use ratatui::prelude::Rect;
 use std::path::PathBuf;
-use ui::{popup::Popup, startup_state::StartUp, states::ScreenState};
+
+use ui::{
+    popups::Popup,
+    states::{startup_state::StartUp, ScreenState},
+};
 
 mod crypto;
 mod db;

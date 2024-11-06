@@ -1,8 +1,16 @@
+use ratatui::{crossterm::event::KeyEvent, layout::Rect, Frame};
+
 use crate::{
-    ui::{home_state::Home, login_state::Login, register_state::Register, startup_state::StartUp},
+    ui::states::{
+        home_state::Home, login_state::Login, register_state::Register, startup_state::StartUp,
+    },
     ImutableAppState, MutableAppState,
 };
-use ratatui::{crossterm::event::KeyEvent, layout::Rect, Frame};
+
+pub mod home_state;
+pub mod login_state;
+pub mod register_state;
+pub mod startup_state;
 
 #[derive(Clone)]
 pub enum ScreenState {

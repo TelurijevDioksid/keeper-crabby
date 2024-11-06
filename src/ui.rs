@@ -1,3 +1,5 @@
+use std::{error::Error, io, path::PathBuf};
+
 use ratatui::{
     backend::{Backend, CrosstermBackend},
     crossterm::{
@@ -9,23 +11,15 @@ use ratatui::{
     widgets::{Block, Borders},
     Frame, Terminal,
 };
-use std::{error::Error, io, path::PathBuf};
 
-use crate::{Application, ImutableAppState, MutableAppState};
-use states::{ScreenState, State};
+use crate::{
+    ui::states::{ScreenState, State},
+    Application, ImutableAppState, MutableAppState,
+};
 
-pub mod popup;
-pub mod states;
 pub mod components;
-
-pub mod exit_popup;
-pub mod insert_pwd_popup;
-pub mod message_popup;
-
-pub mod home_state;
-pub mod login_state;
-pub mod register_state;
-pub mod startup_state;
+pub mod popups;
+pub mod states;
 
 pub fn ui(
     f: &mut Frame,
