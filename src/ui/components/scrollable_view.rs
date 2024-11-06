@@ -11,13 +11,30 @@ use crate::ui::{centered_rect, home_state::Position};
 pub struct ScrollView {}
 
 impl ScrollView {
+    pub fn check_if_width_out_of_bounds(
+        position: &Position,
+        buffer_to_render: &Buffer,
+        area: Rect,
+    ) -> bool {
+        let area = centered_rect(area, 97, 94);
+        if position.offset_x + area.width - 4 > buffer_to_render.area().width {
+            return true;
+        }
+        false
+    }
+
+    pub fn inner_buffer_bounding_box(area: Rect) -> (u16, u16) {
+        let area = centered_rect(area, 97, 94);
+        (area.width - 4, area.height - 3)
+    }
+
     pub fn render(buffer: &mut Buffer, position: &Position, area: Rect, buffer_to_render: &Buffer) {
         let area = ScrollView::render_borders(buffer, area);
         let area = ScrollView::render_scrollbars(buffer, position, area, buffer_to_render);
         ScrollView::render_view(buffer, position, area, buffer_to_render);
     }
 
-    pub fn render_borders(buffer: &mut Buffer, area: Rect) -> Rect {
+    fn render_borders(buffer: &mut Buffer, area: Rect) -> Rect {
         let b = Block::default().borders(Borders::ALL);
 
         b.render(area, buffer);
@@ -25,7 +42,7 @@ impl ScrollView {
         Rect::new(area.x + 1, area.y + 1, area.width - 2, area.height - 2)
     }
 
-    pub fn render_scrollbars(
+    fn render_scrollbars(
         buffer: &mut Buffer,
         position: &Position,
         area: Rect,
@@ -117,7 +134,7 @@ impl ScrollView {
         )
     }
 
-    pub fn render_view(
+    fn render_view(
         buffer: &mut Buffer,
         position: &Position,
         area: Rect,
@@ -141,29 +158,5 @@ impl ScrollView {
                     .clone();
             }
         }
-    }
-
-    pub fn check_if_width_out_of_bounds(
-        position: &Position,
-        buffer_to_render: &Buffer,
-        area: Rect,
-    ) -> bool {
-        let area = centered_rect(area, 97, 94);
-        if position.offset_x + area.width - 4 > buffer_to_render.area().width {
-            return true;
-        }
-        false
-    }
-
-    pub fn check_if_height_out_of_bounds(
-        position: &Position,
-        buffer_to_render: &Buffer,
-        area: Rect,
-    ) -> bool {
-        let area = centered_rect(area, 97, 94);
-        if position.offset_y + area.height - 3 > buffer_to_render.area().height {
-            return true;
-        }
-        false
     }
 }
