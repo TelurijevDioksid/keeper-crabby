@@ -103,7 +103,10 @@ impl Home {
 
     fn scroll_to_bottom(&self, area: Rect) -> Self {
         let (_, inner_buffer_height) = ScrollView::inner_buffer_bounding_box(area);
-        let max_offset_y = self.buffer_to_render().area().height - inner_buffer_height + 1;
+        let max_offset_y =
+            self.buffer_to_render().area().height as i32 - inner_buffer_height as i32 + 1;
+        let max_offset_y = if max_offset_y < 0 { 0 } else { max_offset_y };
+        let max_offset_y = max_offset_y as u16;
         Self {
             secrets: Secrets {
                 secrets: self.secrets.secrets.clone(),
