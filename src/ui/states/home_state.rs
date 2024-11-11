@@ -20,12 +20,28 @@ use crate::{
 const SELECTED_DOMAIN_PWD_BG_COLOR: Color = Color::Rgb(202, 220, 252);
 const SELECTED_DOMAIN_PWD_FG_COLOR: Color = Color::Rgb(0, 36, 107);
 const DOMAIN_PWD_LIST_ITEM_HEIGHT: u16 = 4;
-const RIGHT_PADDING: u16 = 6;
+const RIGHT_MARGIN: u16 = 6;
+const LEFT_PADDING: u16 = 2;
+const MAX_ENTRY_LENGTH: u16 = 32;
+const DOMAIN_PWD_MIDDLE_WIDTH: u16 = 3;
+
+fn hidden_value(domain: String) -> String {
+    assert!(domain.len() <= MAX_ENTRY_LENGTH as usize);
+
+    let mut hidden_value = "  ".to_string() + &domain.clone();
+    hidden_value.push_str(" : ");
+    for _ in 0..MAX_ENTRY_LENGTH {
+        hidden_value.push_str("•");
+    }
+
+    hidden_value
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Secrets {
     pub secrets: Vec<(String, String)>,
     pub selected_secret: usize,
+    pub shown_secrets: Vec<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -46,6 +62,7 @@ impl Home {
         let secrets = Secrets {
             secrets: secrets.into_iter().collect(),
             selected_secret: 0,
+            shown_secrets: vec![],
         };
         Self {
             secrets,
@@ -81,6 +98,7 @@ impl Home {
             secrets: Secrets {
                 secrets: self.secrets.secrets.clone(),
                 selected_secret: 0,
+                shown_secrets: self.secrets.shown_secrets.clone(),
             },
             position: Position {
                 offset_x: self.position.offset_x,
@@ -111,6 +129,7 @@ impl Home {
             secrets: Secrets {
                 secrets: self.secrets.secrets.clone(),
                 selected_secret: self.secrets.secrets.len() - 1,
+                shown_secrets: self.secrets.shown_secrets.clone(),
             },
             position: Position {
                 offset_x: self.position.offset_x,
@@ -144,9 +163,32 @@ impl Home {
             secrets: Secrets {
                 secrets: self.secrets.secrets.clone(),
                 selected_secret,
+                shown_secrets: self.secrets.shown_secrets.clone(),
             },
             position,
             area,
+        }
+    }
+
+    fn toggle_shown_secret(&self) -> Self {
+        assert!(self.secrets.selected_secret < self.secrets.secrets.len());
+
+        let selected_secret = self.secrets.selected_secret;
+        let mut shown_secrets = self.secrets.shown_secrets.clone();
+        if shown_secrets.contains(&selected_secret) {
+            shown_secrets.retain(|&x| x != selected_secret);
+        } else {
+            shown_secrets.push(selected_secret);
+        }
+
+        Self {
+            secrets: Secrets {
+                secrets: self.secrets.secrets.clone(),
+                selected_secret: self.secrets.selected_secret,
+                shown_secrets,
+            },
+            position: self.position.clone(),
+            area: self.area,
         }
     }
 
@@ -177,14 +219,9 @@ impl Home {
     }
 
     fn width(&self) -> u16 {
-        let mut width = 0;
-        for (key, value) in self.secrets.secrets.iter() {
-            let domain_pwd = format!("  {}: {}", key, value);
-            if domain_pwd.len() as u16 > width {
-                width = domain_pwd.len() as u16;
-            }
-        }
-        width = width + RIGHT_PADDING;
+        let max_domain_pwd_width = MAX_ENTRY_LENGTH * 2 + LEFT_PADDING + DOMAIN_PWD_MIDDLE_WIDTH;
+
+        let width = max_domain_pwd_width + RIGHT_MARGIN;
         if width > self.area.width / 2 {
             width
         } else {
@@ -213,9 +250,13 @@ impl Home {
             } else {
                 cursor.render(Rect::new(0, y, cursor_offset, 3), buffer);
             }
-            let domain_pwd = format!("\n  {}: {}\n", key, value);
-            let domain_pwd_text = Text::styled(domain_pwd, style);
-            domain_pwd_text.render(Rect::new(cursor_offset, y, width, 3), buffer);
+            let text = if self.secrets.shown_secrets.contains(&index) {
+                format!("\n  {} : {}", key, value)
+            } else {
+                "\n".to_string() + &hidden_value(key.to_string())
+            };
+            let text = Text::styled(text, style);
+            text.render(Rect::new(cursor_offset, y, width, 3), buffer);
             y += 3;
             let separator = self.separator(buffer.area().width);
             separator.render(Rect::new(cursor_offset, y, width, 1), buffer);
@@ -300,6 +341,9 @@ impl State for Home {
                     immutable_state.rect.unwrap(),
                 ));
             }
+        }
+        if key.code == KeyCode::Enter {
+            screen_state = ScreenState::Home(self.toggle_shown_secret());
         }
         (mutable_state.clone(), screen_state)
     }
