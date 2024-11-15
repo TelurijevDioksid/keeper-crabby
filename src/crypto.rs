@@ -4,7 +4,7 @@ use aes_gcm_siv::{
 };
 use scrypt::{password_hash::SaltString, scrypt, Params};
 use sha2::{Digest, Sha256};
-use std::{error::Error, fs::OpenOptions, io::Write, path::PathBuf, str};
+use std::{error::Error, fs::OpenOptions, io::Write, mem::size_of, path::PathBuf, str};
 
 use crate::create_file;
 
@@ -29,6 +29,10 @@ impl CipherConfig {
             nonce,
             ciphertext,
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.salt.len() + self.nonce.len() + size_of::<u32>() + self.ciphertext.len()
     }
 
     pub fn write_to_file(&self, path: PathBuf) -> Result<(), Box<dyn Error>> {
@@ -62,48 +66,6 @@ impl CipherConfig {
         let plaintext = cipher.decrypt(&self.nonce, self.ciphertext.as_ref())?;
         let result = String::from_utf8(plaintext).unwrap();
         Ok(result)
-    }
-
-    pub fn read_from_bytes(
-        bytes: Vec<u8>,
-        master_pwd: &str,
-    ) -> Result<(Self, Vec<u8>), aead::Error> {
-        let salt = bytes[0..22].to_vec();
-        let nonce = GenericArray::clone_from_slice(&bytes[22..34]);
-        let ciphertext_len = u32::from_be_bytes(bytes[34..38].try_into().unwrap());
-        let ciphertext = bytes[38..(38 + ciphertext_len as usize)].to_vec();
-        let derived_key = DerivedKey::derive_key(master_pwd, Some(salt.clone()));
-        let key = Key::<Aes128GcmSiv>::clone_from_slice(&derived_key.key);
-        let cipher_config = CipherConfig::new(key, salt, nonce, ciphertext);
-        Ok((
-            cipher_config,
-            bytes[(38 + ciphertext_len as usize)..].to_vec(),
-        ))
-    }
-
-    pub fn read_user(p: &PathBuf, username: &str, master_pwd: &str) -> Result<Vec<Self>, String> {
-        let hash = hash(username.to_string());
-        let file_path = p.join(hash.as_str());
-        let mut data: Vec<CipherConfig> = Vec::new();
-        if file_path.exists() {
-            let mut bytes = std::fs::read(file_path).unwrap();
-            let mut run = true;
-            while run {
-                let res = CipherConfig::read_from_bytes(bytes, master_pwd);
-                if res.is_err() {
-                    return Err("Could not read user".to_string());
-                }
-                let (cipher, remaining) = res.unwrap();
-                data.push(cipher);
-                bytes = remaining;
-                if bytes.len() == 0 {
-                    run = false;
-                }
-            }
-        } else {
-            return Err("User not found".to_string());
-        }
-        Ok(data)
     }
 }
 
@@ -169,20 +131,235 @@ impl CreateUserConfig<'_> {
         let res = create_file(&self.path, hashed_username.as_str());
         let file_path = match res {
             Ok(path) => path,
-            Err(_) => return Err("Could not create user.".to_string()),
+            Err(_) => return Err("Could not create file.".to_string()),
         };
         let data = format!("{} {}", self.domain, self.pwd);
 
         let cipher = CipherConfig::encrypt_data(&data, self.master_pwd);
         let cipher = match cipher {
             Ok(cipher) => cipher,
-            Err(_) => return Err("Could not create user.".to_string()),
+            Err(_) => return Err("Could not encrypt data.".to_string()),
         };
         let res = cipher.write_to_file(file_path);
         match res {
             Ok(_) => Ok(()),
-            Err(_) => Err("Could not create user.".to_string()),
+            Err(_) => Err("Could not write to file.".to_string()),
         }
+    }
+}
+
+pub struct AddRecordConfig<'a> {
+    pub username: &'a str,
+    pub master_pwd: &'a str,
+    pub domain: &'a str,
+    pub pwd: &'a str,
+    pub path: PathBuf,
+}
+
+impl AddRecordConfig<'_> {
+    pub fn new<'a>(
+        username: &'a str,
+        master_pwd: &'a str,
+        domain: &'a str,
+        pwd: &'a str,
+        path: PathBuf,
+    ) -> AddRecordConfig<'a> {
+        AddRecordConfig {
+            username,
+            master_pwd,
+            domain,
+            pwd,
+            path,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Record {
+    pub cypher: CipherConfig,
+    pub offset: u32,
+    domain: Option<String>,
+    pwd: Option<String>,
+}
+
+impl Record {
+    fn new(cypher: CipherConfig, offset: u32, domain: Option<String>, pwd: Option<String>) -> Self {
+        Record {
+            cypher,
+            offset,
+            domain,
+            pwd,
+        }
+    }
+
+    fn set_domain(&mut self, domain: String) {
+        self.domain = Some(domain);
+    }
+
+    fn set_pwd(&mut self, pwd: String) {
+        self.pwd = Some(pwd);
+    }
+
+    pub fn secret(&self) -> (String, String) {
+        assert!(self.domain.is_some() && self.pwd.is_some());
+        (self.domain.clone().unwrap(), self.pwd.clone().unwrap())
+    }
+
+    fn read_from_bytes(
+        bytes: Vec<u8>,
+        master_pwd: &str,
+        offset: u32,
+    ) -> Result<(Self, Vec<u8>, u32), aead::Error> {
+        let salt = bytes[0..22].to_vec();
+        let nonce = GenericArray::clone_from_slice(&bytes[22..34]);
+        let ciphertext_len = u32::from_be_bytes(bytes[34..38].try_into().unwrap());
+        let ciphertext = bytes[38..(38 + ciphertext_len as usize)].to_vec();
+        let derived_key = DerivedKey::derive_key(master_pwd, Some(salt.clone()));
+        let key = Key::<Aes128GcmSiv>::clone_from_slice(&derived_key.key);
+        let cipher_config = CipherConfig::new(key, salt, nonce, ciphertext);
+        let current_offset = 38 + ciphertext_len as usize + offset as usize;
+        Ok((
+            Record::new(cipher_config, offset, None, None),
+            bytes[(38 + ciphertext_len as usize)..].to_vec(),
+            current_offset as u32,
+        ))
+    }
+
+    fn read_user(p: &PathBuf, username: &str, master_pwd: &str) -> Result<Vec<Self>, String> {
+        let hash = hash(username.to_string());
+        let file_path = p.join(hash.as_str());
+        let mut data: Vec<Record> = Vec::new();
+        let mut offset = 0;
+        if file_path.exists() {
+            let mut bytes = std::fs::read(file_path).unwrap();
+            let mut run = true;
+            while run {
+                let res = Record::read_from_bytes(bytes, master_pwd, offset);
+                if res.is_err() {
+                    return Err("Could not read user".to_string());
+                }
+                let (cipher, remaining, next_offset) = res.unwrap();
+                data.push(cipher);
+                bytes = remaining;
+                if bytes.len() == 0 {
+                    run = false;
+                }
+
+                offset = next_offset;
+            }
+        } else {
+            return Err("User not found".to_string());
+        }
+        Ok(data)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct User(Vec<Record>);
+
+impl User {
+    pub fn new(path: &PathBuf, username: &str, master_pwd: &str) -> Result<Self, String> {
+        let records = Record::read_user(path, username, master_pwd);
+        let mut new_records = vec![];
+
+        match records {
+            Ok(r) => {
+                for record in r.iter() {
+                    let decrypted = record.cypher.decrypt_data();
+                    match decrypted {
+                        Ok(decrypted) => {
+                            let parts: Vec<&str> = decrypted.split_whitespace().collect();
+                            let mut new_record = record.clone();
+                            new_record.set_domain(parts[0].to_string());
+                            new_record.set_pwd(parts[1].to_string());
+                            new_records.push(new_record);
+                        }
+                        Err(_) => return Err("Could not decrypt data".to_string()),
+                    }
+                }
+            }
+            Err(e) => return Err(e),
+        }
+
+        Ok(User(new_records))
+    }
+
+    pub fn records(&self) -> Vec<Record> {
+        self.0.clone()
+    }
+
+    pub fn add_record(&mut self, record: AddRecordConfig) -> Result<(), String> {
+        let integrity = self.check_integrity(record.username, record.master_pwd, &record.path);
+
+        if !integrity {
+            return Err("Integrity check failed".to_string());
+        }
+
+        let data = format!("{} {}", record.domain, record.pwd);
+        let cipher = CipherConfig::encrypt_data(&data, record.master_pwd);
+        let cipher = match cipher {
+            Ok(cipher) => cipher,
+            Err(_) => return Err("Could not create user.".to_string()),
+        };
+        let offset = self.last_offset();
+        let record = Record::new(
+            cipher,
+            offset,
+            Some(record.domain.to_string()),
+            Some(record.pwd.to_string()),
+        );
+        self.0.push(record);
+        Ok(())
+    }
+
+    fn last_offset(&self) -> u32 {
+        let mut offset = 0;
+        for record in self.0.iter() {
+            if record.offset > offset {
+                offset = record.offset;
+            }
+        }
+
+        offset
+    }
+
+    fn first_record(&self) -> Record {
+        for record in self.0.iter() {
+            if record.offset == 0 {
+                return record.clone();
+            }
+        }
+
+        panic!("No first record found");
+    }
+
+    fn domains(&self) -> Vec<String> {
+        let mut domains = vec![];
+        for record in self.0.iter() {
+            if record.domain.is_some() {
+                domains.push(record.domain.clone().unwrap());
+            }
+        }
+
+        domains
+    }
+
+    fn check_integrity(&self, username: &str, master_pwd: &str, path: &PathBuf) -> bool {
+        let records = Record::read_user(path, username, master_pwd);
+
+        match records {
+            Ok(r) => {
+                let first_record = r[0].clone();
+
+                match first_record.cypher.decrypt_data() {
+                    Ok(_) => {}
+                    Err(_) => return false,
+                }
+            }
+            Err(_) => return false,
+        }
+
+        true
     }
 }
 
@@ -199,4 +376,308 @@ pub fn hash(data: String) -> String {
     hasher.update(data);
     let result = hasher.finalize();
     format!("{:x}", result)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::env;
+
+    use dotenv::dotenv;
+    use rand::Rng;
+
+    use super::*;
+
+    fn random_number() -> u32 {
+        let mut rng = rand::thread_rng();
+        rng.gen_range(10000000..99999999)
+    }
+
+    fn generate_random_username() -> String {
+        format!("keeper-crabby-{}", random_number())
+    }
+
+    #[test]
+    fn test_derive_key() {
+        let data = "kepper-crabby";
+        let derived_key = DerivedKey::derive_key(data, None);
+        let key = derived_key.key;
+        let salt = derived_key.salt;
+        assert_eq!(key.len(), 16);
+        assert_eq!(salt.len(), 22);
+    }
+
+    #[test]
+    fn test_cipher_config() {
+        let data = "keeper-crabby";
+        let master_pwd = "password";
+        let cipher = CipherConfig::encrypt_data(data, master_pwd).unwrap();
+        let decrypted = cipher.decrypt_data().unwrap();
+        assert_eq!(decrypted, data);
+    }
+
+    #[test]
+    fn test_create_user_success() {
+        dotenv().ok();
+        let username = generate_random_username();
+        let username = username.as_str();
+        let master_pwd = "password";
+        let domain = "example.com";
+        let pwd = "password";
+        let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
+        let create_user = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let res = create_user.create_user();
+
+        // delete the file (user)
+        let hashed_username = hash(username.to_string());
+        let file_path = path.join(hashed_username.as_str());
+        std::fs::remove_file(file_path).unwrap();
+
+        assert_eq!(res.is_ok(), true);
+    }
+
+    #[test]
+    fn test_create_user_fail_already_exists() {
+        dotenv().ok();
+        let username = generate_random_username();
+        let username = username.as_str();
+        let master_pwd = "password";
+        let domain = "example.com";
+        let pwd = "password";
+        let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
+        let create_user = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let _ = create_user.create_user();
+
+        let create_user = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let res = create_user.create_user();
+
+        // delete the file (user)
+        let hashed_username = hash(username.to_string());
+        let file_path = path.join(hashed_username.as_str());
+        std::fs::remove_file(file_path).unwrap();
+
+        assert_eq!(res.is_err(), true);
+    }
+
+    #[test]
+    fn test_integrity_success() {
+        dotenv().ok();
+        let username = generate_random_username();
+        let username = username.as_str();
+        let master_pwd = "password";
+        let domain = "example.com";
+        let pwd = "password";
+        let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
+        let create_user = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let _ = create_user.create_user();
+
+        let try_user = User::new(&path, username, master_pwd);
+
+        let user = match try_user {
+            Ok(user) => user,
+            Err(e) => panic!("Error: {}", e),
+        };
+
+        let integrity = user.check_integrity(username, master_pwd, &path);
+
+        // delete the file (user)
+        let hashed_username = hash(username.to_string());
+        let file_path = path.join(hashed_username.as_str());
+        std::fs::remove_file(file_path).unwrap();
+
+        assert_eq!(integrity, true);
+    }
+
+    #[test]
+    fn test_integrity_fail() {
+        dotenv().ok();
+        let username = generate_random_username();
+        let username = username.as_str();
+        let master_pwd = "password";
+        let domain = "example.com";
+        let pwd = "password";
+        let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
+        let create_user = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let _ = create_user.create_user();
+
+        let try_user = User::new(&path, username, master_pwd);
+
+        let user = match try_user {
+            Ok(user) => user,
+            Err(e) => panic!("Error: {}", e),
+        };
+
+        let integrity = user.check_integrity(username, "wrong_pwd", &path);
+
+        // delete the file (user)
+        let hashed_username = hash(username.to_string());
+        let file_path = path.join(hashed_username.as_str());
+        std::fs::remove_file(file_path).unwrap();
+
+        assert_eq!(integrity, false);
+    }
+
+    #[test]
+    fn test_read_record_success() {
+        dotenv().ok();
+        let username = generate_random_username();
+        let username = username.as_str();
+        let master_pwd = "password";
+        let domain = "example.com";
+        let pwd = "password";
+        let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
+        let create_user = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let _ = create_user.create_user();
+
+        let try_user = User::new(&path, username, master_pwd);
+
+        let user = match try_user {
+            Ok(user) => user,
+            Err(e) => panic!("Error: {}", e),
+        };
+
+        let records = user.records();
+        let first_record = user.first_record();
+        let (domain, pwd) = first_record.secret();
+
+        // delete the file (user)
+        let hashed_username = hash(username.to_string());
+        let file_path = path.join(hashed_username.as_str());
+        std::fs::remove_file(file_path).unwrap();
+
+        assert_eq!(records.len(), 1);
+        assert_eq!(domain, "example.com");
+        assert_eq!(pwd, "password");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_read_record_fail() {
+        dotenv().ok();
+        let username = generate_random_username();
+        let username = username.as_str();
+        let master_pwd = "password";
+        let domain = "example.com";
+        let pwd = "password";
+        let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
+        let create_user = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let _ = create_user.create_user();
+
+        let try_user = User::new(&path, username, "wrong_pwd");
+
+        // delete the file (user)
+        let hashed_username = hash(username.to_string());
+        let file_path = path.join(hashed_username.as_str());
+        std::fs::remove_file(file_path).unwrap();
+
+        // this should panic
+        let _ = try_user.unwrap();
+    }
+
+    #[test]
+    fn test_add_record_success() {
+        dotenv().ok();
+        let username = generate_random_username();
+        let username = username.as_str();
+        let master_pwd = "password";
+        let domain = "example.com";
+        let pwd = "password";
+        let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
+        let create_user = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let _ = create_user.create_user();
+
+        let try_user = User::new(&path, username, master_pwd);
+
+        let mut user = match try_user {
+            Ok(user) => user,
+            Err(e) => panic!("Error: {}", e),
+        };
+
+        let new_domain = "example2.com";
+        let new_pwd = "password2";
+        let add_record =
+            AddRecordConfig::new(username, master_pwd, new_domain, new_pwd, path.clone());
+        let _ = user.add_record(add_record);
+
+        let records = user.records();
+        let inserted_record = records
+            .iter()
+            .find(|r| r.domain == Some(new_domain.to_string()));
+
+        // delete the file (user)
+        let hashed_username = hash(username.to_string());
+        let file_path = path.join(hashed_username.as_str());
+        std::fs::remove_file(file_path).unwrap();
+
+        assert_eq!(inserted_record.is_some(), true);
+        assert_eq!(records.len(), 2);
+        assert_eq!(records[1].domain, Some(new_domain.to_string()));
+        assert_eq!(records[1].pwd, Some(new_pwd.to_string()));
+    }
+
+    #[test]
+    fn test_add_record_fail() {
+        dotenv().ok();
+        let username = generate_random_username();
+        let username = username.as_str();
+        let master_pwd = "password";
+        let domain = "example.com";
+        let pwd = "password";
+        let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
+        let create_user = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let _ = create_user.create_user();
+
+        let try_user = User::new(&path, username, master_pwd);
+
+        let mut user = match try_user {
+            Ok(user) => user,
+            Err(e) => panic!("Error: {}", e),
+        };
+
+        let new_domain = "example2.com";
+        let new_pwd = "password2";
+        let add_record =
+            AddRecordConfig::new(username, "wrong_pwd", new_domain, new_pwd, path.clone());
+        let _ = user.add_record(add_record);
+
+        // delete the file (user)
+        let hashed_username = hash(username.to_string());
+        let file_path = path.join(hashed_username.as_str());
+        std::fs::remove_file(file_path).unwrap();
+
+        assert_eq!(user.records().len(), 1);
+    }
+
+    #[test]
+    fn test_add_record_fail_already_exists() {
+        dotenv().ok();
+        let username = generate_random_username();
+        let username = username.as_str();
+        let master_pwd = "password";
+        let domain = "example.com";
+        let pwd = "password";
+        let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
+        let create_user = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let _ = create_user.create_user();
+
+        let try_user = User::new(&path, username, master_pwd);
+
+        let mut user = match try_user {
+            Ok(user) => user,
+            Err(e) => panic!("Error: {}", e),
+        };
+
+        let new_domain = "example.com";
+        let new_pwd = "password2";
+        let add_record =
+            AddRecordConfig::new(username, master_pwd, new_domain, new_pwd, path.clone());
+        let res = user.add_record(add_record);
+
+        // delete the file (user)
+        let hashed_username = hash(username.to_string());
+        let file_path = path.join(hashed_username.as_str());
+        std::fs::remove_file(file_path).unwrap();
+
+        assert_eq!(user.records().len(), 1);
+        assert_eq!(res.is_err(), true);
+    }
 }

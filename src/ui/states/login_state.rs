@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
@@ -11,7 +11,7 @@ use ratatui::{
 };
 
 use crate::{
-    crypto::{check_user, CipherConfig},
+    crypto::{check_user, User},
     ui::{
         centered_rect,
         popups::message_popup::MessagePopup,
@@ -77,31 +77,17 @@ impl Login {
 
     // this needs to be reworked
     // this function should return a vector of cipher configs and a master pwd
-    pub fn login(&self) -> Result<HashMap<String, String>, String> {
+    pub fn login(&self) -> Result<User, String> {
         let user_exists = check_user(&self.username, self.path.clone());
         if !user_exists {
             return Err("Cannot login".to_string());
         }
 
-        let configs = CipherConfig::read_user(&self.path, &self.username, &self.master_password);
+        let user = User::new(&self.path, &self.username, &self.master_password);
 
-        match configs {
-            Ok(configs) => {
-                let mut data = HashMap::new();
-                for config in configs {
-                    match config.decrypt_data() {
-                        Ok(decrypted) => {
-                            let parts: Vec<&str> = decrypted.split_whitespace().collect();
-                            data.insert(parts[0].to_string(), parts[1].to_string());
-                        }
-                        Err(_) => {
-                            return Err("Cannot login".to_string());
-                        }
-                    }
-                }
-                Ok(data)
-            }
-            Err(e) => Err(e),
+        match user {
+            Ok(u) => Ok(u),
+            Err(_) => Err("Cannot login".to_string()),
         }
     }
 }

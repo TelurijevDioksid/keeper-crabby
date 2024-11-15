@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
     prelude::{Buffer, Rect},
@@ -10,6 +8,7 @@ use ratatui::{
 };
 
 use crate::{
+    crypto::User,
     ui::{
         components::scrollable_view::ScrollView,
         states::{login_state::Login, State},
@@ -52,19 +51,21 @@ pub struct Position {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Home {
+    pub user: User,
     pub secrets: Secrets,
     pub position: Position,
     pub area: Rect,
 }
 
 impl Home {
-    pub fn new(secrets: HashMap<String, String>, position: Position, area: Rect) -> Self {
+    pub fn new(user: User, position: Position, area: Rect) -> Self {
         let secrets = Secrets {
-            secrets: secrets.into_iter().collect(),
+            secrets: user.records().iter().map(|x| x.secret()).collect(),
             selected_secret: 0,
             shown_secrets: vec![],
         };
         Self {
+            user,
             secrets,
             position: Position {
                 offset_x: position.offset_x,
@@ -76,6 +77,7 @@ impl Home {
 
     fn copy_with_secrets(&self, position: Position, area: Rect) -> Self {
         Self {
+            user: self.user.clone(),
             secrets: self.secrets.clone(),
             position,
             area,
@@ -95,6 +97,7 @@ impl Home {
 
     fn scroll_to_top(&self, area: Rect) -> Self {
         Self {
+            user: self.user.clone(),
             secrets: Secrets {
                 secrets: self.secrets.secrets.clone(),
                 selected_secret: 0,
@@ -126,6 +129,7 @@ impl Home {
         let max_offset_y = if max_offset_y < 0 { 0 } else { max_offset_y };
         let max_offset_y = max_offset_y as u16;
         Self {
+            user: self.user.clone(),
             secrets: Secrets {
                 secrets: self.secrets.secrets.clone(),
                 selected_secret: self.secrets.secrets.len() - 1,
@@ -160,6 +164,7 @@ impl Home {
             }
         }
         Self {
+            user: self.user.clone(),
             secrets: Secrets {
                 secrets: self.secrets.secrets.clone(),
                 selected_secret,
@@ -182,6 +187,7 @@ impl Home {
         }
 
         Self {
+            user: self.user.clone(),
             secrets: Secrets {
                 secrets: self.secrets.secrets.clone(),
                 selected_secret: self.secrets.selected_secret,
