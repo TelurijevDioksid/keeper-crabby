@@ -50,3 +50,8 @@ pub fn create_file(p: &PathBuf, file_name: &str) -> io::Result<PathBuf> {
         ));
     }
 }
+
+pub fn clear_file_content(p: &PathBuf) -> io::Result<()> {
+    File::create(p)?;
+    Ok(())
+}

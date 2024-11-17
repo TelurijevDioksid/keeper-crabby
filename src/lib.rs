@@ -11,7 +11,7 @@ mod db;
 mod ui;
 
 pub use crypto::hash;
-pub use db::{create_file, init as db_init};
+pub use db::{clear_file_content, create_file, init as db_init};
 pub use ui::start;
 
 pub struct Application {}

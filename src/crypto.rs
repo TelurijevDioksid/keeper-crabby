@@ -4,9 +4,16 @@ use aes_gcm_siv::{
 };
 use scrypt::{password_hash::SaltString, scrypt, Params};
 use sha2::{Digest, Sha256};
-use std::{error::Error, fs::OpenOptions, io::Write, mem::size_of, path::PathBuf, str};
+use std::{
+    error::Error,
+    fs::{self, OpenOptions},
+    io::Write,
+    mem::size_of,
+    path::PathBuf,
+    str,
+};
 
-use crate::create_file;
+use crate::{clear_file_content, create_file};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CipherConfig {
@@ -17,7 +24,7 @@ pub struct CipherConfig {
 }
 
 impl CipherConfig {
-    pub fn new(
+    fn new(
         key: Key<Aes128GcmSiv>,
         salt: Vec<u8>,
         nonce: GenericArray<u8, U12>,
@@ -35,7 +42,7 @@ impl CipherConfig {
         self.salt.len() + self.nonce.len() + size_of::<u32>() + self.ciphertext.len()
     }
 
-    pub fn write_to_file(&self, path: PathBuf) -> Result<(), Box<dyn Error>> {
+    pub fn write_to_file(&self, path: &PathBuf) -> Result<(), Box<dyn Error>> {
         let mut f = OpenOptions::new().append(true).open(path)?;
 
         // this is needed to get the length of the ciphertext
@@ -140,7 +147,7 @@ impl CreateUserConfig<'_> {
             Ok(cipher) => cipher,
             Err(_) => return Err("Could not encrypt data.".to_string()),
         };
-        let res = cipher.write_to_file(file_path);
+        let res = cipher.write_to_file(&file_path);
         match res {
             Ok(_) => Ok(()),
             Err(_) => Err("Could not write to file.".to_string()),
@@ -165,6 +172,55 @@ impl AddRecordConfig<'_> {
         path: PathBuf,
     ) -> AddRecordConfig<'a> {
         AddRecordConfig {
+            username,
+            master_pwd,
+            domain,
+            pwd,
+            path,
+        }
+    }
+}
+
+pub struct RemoveRecordConfig<'a> {
+    pub username: &'a str,
+    pub master_pwd: &'a str,
+    pub domain: &'a str,
+    pub path: PathBuf,
+}
+
+impl RemoveRecordConfig<'_> {
+    pub fn new<'a>(
+        username: &'a str,
+        master_pwd: &'a str,
+        domain: &'a str,
+        path: PathBuf,
+    ) -> RemoveRecordConfig<'a> {
+        RemoveRecordConfig {
+            username,
+            master_pwd,
+            domain,
+            path,
+        }
+    }
+}
+
+pub struct ModifyRecordConfig<'a> {
+    pub username: &'a str,
+    pub master_pwd: &'a str,
+    pub domain: &'a str,
+    pub pwd: &'a str,
+    pub path: PathBuf,
+}
+
+impl ModifyRecordConfig<'_> {
+    pub fn new<'a>(
+        username: &'a str,
+        master_pwd: &'a str,
+        domain: &'a str,
+        pwd: &'a str,
+        path: PathBuf,
+    ) -> ModifyRecordConfig<'a> {
+        ModifyRecordConfig {
             username,
             master_pwd,
             domain,
@@ -231,7 +287,7 @@ impl Record {
         let mut data: Vec<Record> = Vec::new();
         let mut offset = 0;
         if file_path.exists() {
-            let mut bytes = std::fs::read(file_path).unwrap();
+            let mut bytes = fs::read(file_path).unwrap();
             let mut run = true;
             while run {
                 let res = Record::read_from_bytes(bytes, master_pwd, offset);
@@ -255,7 +311,7 @@ impl Record {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct User(Vec<Record>);
+pub struct User(Vec<Record>, PathBuf);
 
 impl User {
     pub fn new(path: &PathBuf, username: &str, master_pwd: &str) -> Result<Self, String> {
@@ -281,7 +337,9 @@ impl User {
             Err(e) => return Err(e),
         }
 
-        Ok(User(new_records))
+        let path = path.join(hash(username.to_string()));
+
+        Ok(User(new_records, path))
     }
 
     pub fn records(&self) -> Vec<Record> {
@@ -310,6 +368,54 @@ impl User {
         );
         self.0.push(record);
         Ok(())
+    }
+
+    pub fn remove_record(&mut self, record: RemoveRecordConfig) -> Result<(), String> {
+        let integrity = self.check_integrity(record.username, record.master_pwd, &record.path);
+
+        if !integrity {
+            return Err("Integrity check failed".to_string());
+        }
+
+        if self
+            .domains()
+            .iter()
+            .find(|d| d.as_str() == record.domain)
+            .is_none()
+        {
+            return Err("Record not found".to_string());
+        }
+
+        let mut new_records = vec![];
+        for r in self.0.iter() {
+            if r.domain != Some(record.domain.to_string()) {
+                new_records.push(r.clone());
+            }
+        }
+
+        // TODO: calibrate offsets or remove them
+
+        self.0 = new_records;
+        self.remove_records();
+        let path = self.path();
+
+        for record in self.0.iter() {
+            let res = record.cypher.write_to_file(&path);
+            match res {
+                Ok(_) => {}
+                Err(e) => return Err(e.to_string()),
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn modify_record(&mut self, record: ModifyRecordConfig) -> Result<(), String> {
+        todo!()
+    }
+
+    fn path(&self) -> PathBuf {
+        self.1.clone()
     }
 
     fn last_offset(&self) -> u32 {
@@ -361,6 +467,14 @@ impl User {
 
         true
     }
+
+    fn remove_records(&mut self) {
+        let path = self.path();
+        match clear_file_content(&path) {
+            Ok(_) => {}
+            Err(_) => panic!("Could not clear file content"),
+        }
+    }
 }
 
 pub fn check_user(username: &str, path: PathBuf) -> bool {
@@ -380,7 +494,7 @@ pub fn hash(data: String) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
+    use std::{env, fs};
 
     use dotenv::dotenv;
     use rand::Rng;
@@ -430,7 +544,7 @@ mod tests {
         // delete the file (user)
         let hashed_username = hash(username.to_string());
         let file_path = path.join(hashed_username.as_str());
-        std::fs::remove_file(file_path).unwrap();
+        fs::remove_file(file_path).unwrap();
 
         assert_eq!(res.is_ok(), true);
     }
@@ -453,7 +567,7 @@ mod tests {
         // delete the file (user)
         let hashed_username = hash(username.to_string());
         let file_path = path.join(hashed_username.as_str());
-        std::fs::remove_file(file_path).unwrap();
+        fs::remove_file(file_path).unwrap();
 
         assert_eq!(res.is_err(), true);
     }
@@ -480,9 +594,7 @@ mod tests {
         let integrity = user.check_integrity(username, master_pwd, &path);
 
         // delete the file (user)
-        let hashed_username = hash(username.to_string());
-        let file_path = path.join(hashed_username.as_str());
-        std::fs::remove_file(file_path).unwrap();
+        fs::remove_file(user.path()).unwrap();
 
         assert_eq!(integrity, true);
     }
@@ -509,9 +621,7 @@ mod tests {
         let integrity = user.check_integrity(username, "wrong_pwd", &path);
 
         // delete the file (user)
-        let hashed_username = hash(username.to_string());
-        let file_path = path.join(hashed_username.as_str());
-        std::fs::remove_file(file_path).unwrap();
+        fs::remove_file(user.path()).unwrap();
 
         assert_eq!(integrity, false);
     }
@@ -540,9 +650,7 @@ mod tests {
         let (domain, pwd) = first_record.secret();
 
         // delete the file (user)
-        let hashed_username = hash(username.to_string());
-        let file_path = path.join(hashed_username.as_str());
-        std::fs::remove_file(file_path).unwrap();
+        fs::remove_file(user.path()).unwrap();
 
         assert_eq!(records.len(), 1);
         assert_eq!(domain, "example.com");
@@ -567,7 +675,7 @@ mod tests {
         // delete the file (user)
         let hashed_username = hash(username.to_string());
         let file_path = path.join(hashed_username.as_str());
-        std::fs::remove_file(file_path).unwrap();
+        fs::remove_file(file_path).unwrap();
 
         // this should panic
         let _ = try_user.unwrap();
@@ -604,9 +712,7 @@ mod tests {
             .find(|r| r.domain == Some(new_domain.to_string()));
 
         // delete the file (user)
-        let hashed_username = hash(username.to_string());
-        let file_path = path.join(hashed_username.as_str());
-        std::fs::remove_file(file_path).unwrap();
+        fs::remove_file(user.path()).unwrap();
 
         assert_eq!(inserted_record.is_some(), true);
         assert_eq!(records.len(), 2);
@@ -640,9 +746,7 @@ mod tests {
         let _ = user.add_record(add_record);
 
         // delete the file (user)
-        let hashed_username = hash(username.to_string());
-        let file_path = path.join(hashed_username.as_str());
-        std::fs::remove_file(file_path).unwrap();
+        fs::remove_file(user.path()).unwrap();
 
         assert_eq!(user.records().len(), 1);
     }
@@ -673,11 +777,229 @@ mod tests {
         let res = user.add_record(add_record);
 
         // delete the file (user)
-        let hashed_username = hash(username.to_string());
-        let file_path = path.join(hashed_username.as_str());
-        std::fs::remove_file(file_path).unwrap();
+        fs::remove_file(user.path()).unwrap();
 
         assert_eq!(user.records().len(), 1);
         assert_eq!(res.is_err(), true);
+    }
+
+    #[test]
+    fn test_remove_record_success() {
+        dotenv().ok();
+        let username = generate_random_username();
+        let username = username.as_str();
+        let master_pwd = "password";
+        let domain = "example.com";
+        let pwd = "password";
+        let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
+        let create_user = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let _ = create_user.create_user();
+
+        let try_user = User::new(&path, username, master_pwd);
+
+        let mut user = match try_user {
+            Ok(user) => user,
+            Err(e) => panic!("Error: {}", e),
+        };
+
+        let new_domain = "example2.com";
+        let new_pwd = "password2";
+        let add_record =
+            AddRecordConfig::new(username, master_pwd, new_domain, new_pwd, path.clone());
+        let _ = user.add_record(add_record);
+
+        let new_domain = "example3.com";
+        let new_pwd = "password3";
+        let add_record =
+            AddRecordConfig::new(username, master_pwd, new_domain, new_pwd, path.clone());
+        let _ = user.add_record(add_record);
+
+        let remove_record =
+            RemoveRecordConfig::new(username, master_pwd, "example2.com", path.clone());
+        let res = user.remove_record(remove_record);
+
+        let records = user.records();
+        let domains = user.domains();
+
+        let file_length = fs::read(user.path()).unwrap().len();
+        let records_len = records.iter().fold(0, |acc, r| acc + r.cypher.len());
+
+        // delete the file (user)
+        fs::remove_file(user.path()).unwrap();
+
+        assert_eq!(res.is_ok(), true);
+        assert_eq!(records.len(), 2);
+        assert_eq!(
+            domains
+                .iter()
+                .find(|d| d.as_str() == "example2.com")
+                .is_none(),
+            true
+        );
+        assert_eq!(
+            domains
+                .iter()
+                .find(|d| d.as_str() == "example3.com")
+                .is_some(),
+            true
+        );
+        assert_eq!(
+            domains
+                .iter()
+                .find(|d| d.as_str() == "example.com")
+                .is_some(),
+            true
+        );
+        assert_eq!(file_length, records_len);
+    }
+
+    #[test]
+    fn test_remove_record_read_user_success() {
+        dotenv().ok();
+        let username = generate_random_username();
+        let username = username.as_str();
+        let master_pwd = "password";
+        let domain = "example.com";
+        let pwd = "password";
+        let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
+        let create_user = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let _ = create_user.create_user();
+
+        let try_user = User::new(&path, username, master_pwd);
+
+        let mut user = match try_user {
+            Ok(user) => user,
+            Err(e) => panic!("Error: {}", e),
+        };
+
+        let new_domain = "example2.com";
+        let new_pwd = "password2";
+        let add_record =
+            AddRecordConfig::new(username, master_pwd, new_domain, new_pwd, path.clone());
+        let _ = user.add_record(add_record);
+
+        let new_domain = "example3.com";
+        let new_pwd = "password3";
+        let add_record =
+            AddRecordConfig::new(username, master_pwd, new_domain, new_pwd, path.clone());
+        let _ = user.add_record(add_record);
+
+        let remove_record =
+            RemoveRecordConfig::new(username, master_pwd, "example2.com", path.clone());
+        let res = user.remove_record(remove_record);
+
+        let records = Record::read_user(&path, username, master_pwd).unwrap();
+
+        // delete the file (user)
+        fs::remove_file(user.path()).unwrap();
+
+        assert_eq!(res.is_ok(), true);
+        assert_eq!(records.len(), 2);
+    }
+
+    #[test]
+    fn test_remove_record_fail_not_found() {
+        dotenv().ok();
+        let username = generate_random_username();
+        let username = username.as_str();
+        let master_pwd = "password";
+        let domain = "example.com";
+        let pwd = "password";
+        let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
+        let create_user = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let _ = create_user.create_user();
+
+        let try_user = User::new(&path, username, master_pwd);
+
+        let mut user = match try_user {
+            Ok(user) => user,
+            Err(e) => panic!("Error: {}", e),
+        };
+
+        let new_domain = "example2.com";
+        let new_pwd = "password2";
+        let add_record =
+            AddRecordConfig::new(username, master_pwd, new_domain, new_pwd, path.clone());
+        let _ = user.add_record(add_record);
+
+        let remove_record =
+            RemoveRecordConfig::new(username, master_pwd, "example3.com", path.clone());
+        let res = user.remove_record(remove_record);
+
+        // delete the file (user)
+        fs::remove_file(user.path()).unwrap();
+
+        assert_eq!(res.is_err(), true);
+    }
+
+    #[test]
+    fn test_remove_record_fail_integrity_check() {
+        dotenv().ok();
+        let username = generate_random_username();
+        let username = username.as_str();
+        let master_pwd = "password";
+        let domain = "example.com";
+        let pwd = "password";
+        let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
+        let create_user = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let _ = create_user.create_user();
+
+        let try_user = User::new(&path, username, master_pwd);
+
+        let mut user = match try_user {
+            Ok(user) => user,
+            Err(e) => panic!("Error: {}", e),
+        };
+
+        let new_domain = "example2.com";
+        let new_pwd = "password2";
+        let add_record =
+            AddRecordConfig::new(username, master_pwd, new_domain, new_pwd, path.clone());
+        let _ = user.add_record(add_record);
+
+        let remove_record =
+            RemoveRecordConfig::new(username, "wrong_pwd", "example2.com", path.clone());
+        let res = user.remove_record(remove_record);
+
+        // delete the file (user)
+        fs::remove_file(user.path()).unwrap();
+
+        assert_eq!(res.is_err(), true);
+    }
+
+    #[test]
+    pub fn test_modify_record_success() {
+        dotenv().ok();
+        let username = generate_random_username();
+        let username = username.as_str();
+        let master_pwd = "password";
+        let domain = "example.com";
+        let pwd = "password";
+        let new_pwd = "password2";
+        let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
+        let create_user = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let _ = create_user.create_user();
+
+        let try_user = User::new(&path, username, master_pwd);
+
+        let mut user = match try_user {
+            Ok(user) => user,
+            Err(e) => panic!("Error: {}", e),
+        };
+
+        let modify_record =
+            ModifyRecordConfig::new(username, master_pwd, domain, new_pwd, path.clone());
+        let _ = user.modify_record(modify_record);
+
+        let records = Record::read_user(&path, username, master_pwd).unwrap();
+        let modified_record = records
+            .iter()
+            .find(|r| r.domain == Some(domain.to_string()));
+
+        // delete the file (user)
+        fs::remove_file(user.path()).unwrap();
+
+        assert_eq!(modified_record.is_some(), true);
+        assert_eq!(records.len(), 1);
     }
 }
