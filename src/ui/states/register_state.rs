@@ -10,7 +10,7 @@ use ratatui::{
 };
 
 use crate::{
-    crypto::CreateUserConfig,
+    crypto::user::CreateUserConfig,
     ui::{
         popups::insert_pwd_popup::{DomainPwdInsert, InsertPwd},
         {

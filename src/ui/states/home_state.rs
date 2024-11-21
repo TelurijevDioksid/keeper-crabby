@@ -8,7 +8,7 @@ use ratatui::{
 };
 
 use crate::{
-    crypto::User,
+    crypto::user::User,
     ui::{
         components::scrollable_view::ScrollView,
         states::{login_state::Login, State},
