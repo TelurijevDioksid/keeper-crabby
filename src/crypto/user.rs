@@ -326,10 +326,17 @@ impl User {
         }
 
         let mut new_records = vec![];
+        let mut found = false;
         for r in self.0.iter() {
             if r.domain != Some(record.domain.to_string()) {
                 new_records.push(r.clone());
+            } else {
+                found = true;
             }
+        }
+
+        if !found {
+            return Err("Record not found".to_string());
         }
 
         let data = format!("{} {}", record.domain, record.pwd);
