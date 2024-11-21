@@ -319,7 +319,44 @@ impl User {
     }
 
     pub fn modify_record(&mut self, record: RecordOperationConfig) -> Result<(), String> {
-        todo!()
+        let integrity = self.check_integrity(&record.username, &record.master_pwd, &record.path);
+
+        if !integrity {
+            return Err("Integrity check failed".to_string());
+        }
+
+        let mut new_records = vec![];
+        for r in self.0.iter() {
+            if r.domain != Some(record.domain.to_string()) {
+                new_records.push(r.clone());
+            }
+        }
+
+        let data = format!("{} {}", record.domain, record.pwd);
+        let cipher = CipherConfig::encrypt_data(&data, &record.master_pwd);
+        let cipher = match cipher {
+            Ok(cipher) => cipher,
+            Err(_) => return Err("Could not create user.".to_string()),
+        };
+
+        let record = Record::new(
+            cipher,
+            self.last_offset(),
+            Some(record.domain.to_string()),
+            Some(record.pwd.to_string()),
+        );
+
+        new_records.push(record);
+
+        let mut buffer = vec![];
+        for record in new_records.iter() {
+            record.cypher.write(&mut buffer);
+        }
+
+        write_to_file(&self.path(), buffer).unwrap();
+        self.0 = new_records;
+
+        Ok(())
     }
 
     fn path(&self) -> PathBuf {
@@ -726,8 +763,8 @@ mod tests {
         );
         let res = user.remove_record(remove_record);
 
-        let records =
-            Record::read_user(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
+        let user = User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
+        let records = user.records();
 
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
@@ -811,10 +848,10 @@ mod tests {
             new_pwd,
             &user_data.path,
         );
-        let _ = user.modify_record(modify_record);
+        let res = user.modify_record(modify_record);
 
-        let records =
-            Record::read_user(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
+        let user = User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
+        let records = user.records();
         let modified_record = records
             .iter()
             .find(|r| r.domain == Some(user_data.domain.to_string()));
@@ -822,7 +859,9 @@ mod tests {
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
 
+        assert_eq!(res.is_ok(), true);
         assert_eq!(modified_record.is_some(), true);
+        assert_eq!(modified_record.unwrap().pwd, Some(new_pwd.to_string()));
         assert_eq!(records.len(), 1);
     }
 }
