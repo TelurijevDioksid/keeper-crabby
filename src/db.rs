@@ -1,7 +1,8 @@
 use directories::ProjectDirs;
 use std::{
+    fs::OpenOptions,
     fs::{self, File},
-    io,
+    io::{self, Write},
     path::{Path, PathBuf},
 };
 
@@ -52,6 +53,36 @@ pub fn create_file(p: &PathBuf, file_name: &str) -> io::Result<PathBuf> {
 }
 
 pub fn clear_file_content(p: &PathBuf) -> io::Result<()> {
+    if !p.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "File does not exist",
+        ));
+    }
     File::create(p)?;
+    Ok(())
+}
+
+pub fn write_to_file(p: &PathBuf, data: Vec<u8>) -> io::Result<()> {
+    if !p.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "File does not exist",
+        ));
+    }
+    let mut f = File::create(p)?;
+    f.write_all(&data)?;
+    Ok(())
+}
+
+pub fn append_to_file(p: &PathBuf, data: Vec<u8>) -> io::Result<()> {
+    if !p.exists() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "File does not exist",
+        ));
+    }
+    let mut f = OpenOptions::new().append(true).open(p)?;
+    f.write_all(&data)?;
     Ok(())
 }

@@ -3,16 +3,13 @@ use aes_gcm_siv::{
     AeadCore, Aes128GcmSiv, Key,
 };
 use scrypt::{password_hash::SaltString, scrypt, Params};
-use std::{
-    error::Error,
-    fs::{self, OpenOptions},
-    io::Write,
-    mem::size_of,
-    path::PathBuf,
-    str,
-};
+use std::{fs, mem::size_of, path::PathBuf, str};
 
-use crate::{clear_file_content, create_file, hash};
+use crate::{
+    clear_file_content, create_file,
+    db::{append_to_file, write_to_file},
+    hash,
+};
 
 pub use super::models::RecordOperationConfig;
 
@@ -44,9 +41,7 @@ impl CipherConfig {
     }
 
     // TODO: rework this function, it should not write but return bytes
-    fn write_to_file(&self, path: &PathBuf) -> Result<(), Box<dyn Error>> {
-        let mut f = OpenOptions::new().append(true).open(path)?;
-
+    fn write(&self, buffer: &mut Vec<u8>) {
         // this is needed to get the length of the ciphertext
         // so that we can read it back from the file
         let ciphertext_len: u32 = self.ciphertext.len() as u32;
@@ -55,9 +50,8 @@ impl CipherConfig {
         data.append(&mut self.nonce.to_vec());
         data.append(&mut ciphertext_len.to_be_bytes().to_vec());
         data.append(&mut self.ciphertext.clone());
-        f.write_all(&data)?;
 
-        Ok(())
+        buffer.append(&mut data);
     }
 
     fn encrypt_data(data: &str, master_pwd: &str) -> Result<Self, aead::Error> {
@@ -246,8 +240,9 @@ impl User {
             Ok(cipher) => cipher,
             Err(_) => return Err("Could not encrypt data.".to_string()),
         };
-        let res = cipher.write_to_file(&file_path);
-        match res {
+        let mut buffer = vec![];
+        cipher.write(&mut buffer);
+        match write_to_file(&file_path, buffer) {
             Ok(_) => Ok(()),
             Err(_) => Err("Could not write to file.".to_string()),
         }
@@ -277,7 +272,11 @@ impl User {
             Some(record.domain.to_string()),
             Some(record.pwd.to_string()),
         );
+        let mut buffer = vec![];
+        record.cypher.write(&mut buffer);
+        append_to_file(&self.path(), buffer).unwrap();
         self.0.push(record);
+
         Ok(())
     }
 
@@ -309,14 +308,13 @@ impl User {
         self.0 = new_records;
         self.remove_records();
         let path = self.path();
+        let mut buffer = vec![];
 
         for record in self.0.iter() {
-            let res = record.cypher.write_to_file(&path);
-            match res {
-                Ok(_) => {}
-                Err(e) => return Err(e.to_string()),
-            }
+            record.cypher.write(&mut buffer);
         }
+
+        write_to_file(&path, buffer).unwrap();
 
         Ok(())
     }
@@ -558,6 +556,8 @@ mod tests {
             &user_data.path,
         );
         let res = user.add_record(add_record);
+
+        let user = User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
 
         let records = user.records();
         let inserted_record = records
