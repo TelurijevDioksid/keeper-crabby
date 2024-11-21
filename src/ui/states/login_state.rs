@@ -83,7 +83,7 @@ impl Login {
             return Err("Cannot login".to_string());
         }
 
-        let user = User::new(&self.path, &self.username, &self.master_password);
+        let user = User::from(&self.path, &self.username, &self.master_password);
 
         match user {
             Ok(u) => Ok(u),

@@ -10,7 +10,7 @@ use ratatui::{
 };
 
 use crate::{
-    crypto::user::CreateUserConfig,
+    crypto::user::{CreateUserConfig, User},
     ui::{
         popups::insert_pwd_popup::{DomainPwdInsert, InsertPwd},
         {
@@ -123,7 +123,7 @@ impl DomainPwdInsert for Register {
         // first need to validate config
         // match config.validate() ...
 
-        let res = config.create_user();
+        let res = User::new(&config);
 
         match res {
             Ok(_) => Ok(()),
