@@ -14,9 +14,7 @@ use std::{
 
 use crate::{clear_file_content, create_file, hash};
 
-pub use super::models::{
-    AddRecordConfig, CreateUserConfig, ModifyRecordConfig, RemoveRecordConfig,
-};
+pub use super::models::RecordOperationConfig;
 
 #[derive(Debug, Clone, PartialEq)]
 struct CipherConfig {
@@ -234,7 +232,7 @@ impl User {
         Ok(User(new_records, path))
     }
 
-    pub fn new(user: &CreateUserConfig) -> Result<(), String> {
+    pub fn new(user: &RecordOperationConfig) -> Result<(), String> {
         let hashed_username = hash(user.username.to_string());
         let res = create_file(&user.path, hashed_username.as_str());
         let file_path = match res {
@@ -259,15 +257,15 @@ impl User {
         self.0.clone()
     }
 
-    pub fn add_record(&mut self, record: AddRecordConfig) -> Result<(), String> {
-        let integrity = self.check_integrity(record.username, record.master_pwd, &record.path);
+    pub fn add_record(&mut self, record: RecordOperationConfig) -> Result<(), String> {
+        let integrity = self.check_integrity(&record.username, &record.master_pwd, &record.path);
 
         if !integrity {
             return Err("Integrity check failed".to_string());
         }
 
         let data = format!("{} {}", record.domain, record.pwd);
-        let cipher = CipherConfig::encrypt_data(&data, record.master_pwd);
+        let cipher = CipherConfig::encrypt_data(&data, &record.master_pwd);
         let cipher = match cipher {
             Ok(cipher) => cipher,
             Err(_) => return Err("Could not create user.".to_string()),
@@ -283,8 +281,8 @@ impl User {
         Ok(())
     }
 
-    pub fn remove_record(&mut self, record: RemoveRecordConfig) -> Result<(), String> {
-        let integrity = self.check_integrity(record.username, record.master_pwd, &record.path);
+    pub fn remove_record(&mut self, record: RecordOperationConfig) -> Result<(), String> {
+        let integrity = self.check_integrity(&record.username, &record.master_pwd, &record.path);
 
         if !integrity {
             return Err("Integrity check failed".to_string());
@@ -323,7 +321,7 @@ impl User {
         Ok(())
     }
 
-    pub fn modify_record(&mut self, record: ModifyRecordConfig) -> Result<(), String> {
+    pub fn modify_record(&mut self, record: RecordOperationConfig) -> Result<(), String> {
         todo!()
     }
 
@@ -407,21 +405,21 @@ mod tests {
         format!("keeper-crabby-{}", random_number())
     }
 
-    fn setup_user_data(domain: &str) -> Result<CreateUserConfig, String> {
+    fn setup_user_data(domain: &str) -> Result<RecordOperationConfig, String> {
         dotenv().ok();
         let username = generate_random_username();
         let username = username.as_str().to_owned();
         let master_pwd = "password";
         let pwd = "password";
         let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
-        let user = CreateUserConfig::new(username.as_str(), master_pwd, domain, pwd, path.clone());
+        let user = RecordOperationConfig::new(username.as_str(), master_pwd, domain, pwd, &path);
         match User::new(&user) {
             Ok(_) => Ok(user.clone()),
             Err(e) => Err(e),
         }
     }
 
-    fn create_user(config: &CreateUserConfig) -> Result<User, String> {
+    fn create_user(config: &RecordOperationConfig) -> Result<User, String> {
         User::from(&config.path, &config.username, &config.master_pwd)
     }
 
@@ -471,10 +469,10 @@ mod tests {
         let domain = "example.com";
         let pwd = "password";
         let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
-        let config = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let config = RecordOperationConfig::new(username, master_pwd, domain, pwd, &path);
         let _ = User::new(&config);
 
-        let config = CreateUserConfig::new(username, master_pwd, domain, pwd, path.clone());
+        let config = RecordOperationConfig::new(username, master_pwd, domain, pwd, &path);
         let res = User::new(&config);
 
         // delete the file (user)
@@ -505,7 +503,7 @@ mod tests {
         let user_data = setup_user_data("example.com").unwrap();
         let user = create_user(&user_data).unwrap();
 
-        let integrity = user.check_integrity(&user_data.username, "wrong_pwd", &user.path());
+        let integrity = user.check_integrity(&user_data.username, "wrong_pwd", &user_data.path);
 
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
@@ -552,12 +550,12 @@ mod tests {
 
         let new_domain = "example2.com";
         let new_pwd = "password2";
-        let add_record = AddRecordConfig::new(
+        let add_record = RecordOperationConfig::new(
             &user_data.username,
             &user_data.master_pwd,
             new_domain,
             new_pwd,
-            user_data.path,
+            &user_data.path,
         );
         let res = user.add_record(add_record);
 
@@ -583,12 +581,12 @@ mod tests {
 
         let new_domain = "example2.com";
         let new_pwd = "password2";
-        let add_record = AddRecordConfig::new(
+        let add_record = RecordOperationConfig::new(
             &user_data.username,
             "wrong_pwd",
             new_domain,
             new_pwd,
-            user.path(),
+            &user_data.path,
         );
         let res = user.add_record(add_record);
 
@@ -606,12 +604,12 @@ mod tests {
 
         let new_domain = "example.com";
         let new_pwd = "password2";
-        let add_record = AddRecordConfig::new(
+        let add_record = RecordOperationConfig::new(
             &user_data.username,
             &user_data.master_pwd,
             new_domain,
             new_pwd,
-            user.path(),
+            &user_data.path,
         );
         let res = user.add_record(add_record);
 
@@ -629,31 +627,32 @@ mod tests {
 
         let new_domain = "example2.com";
         let new_pwd = "password2";
-        let add_record = AddRecordConfig::new(
+        let add_record = RecordOperationConfig::new(
             &user_data.username,
             &user_data.master_pwd,
             new_domain,
             new_pwd,
-            user_data.path.clone(),
+            &user_data.path,
         );
         let _ = user.add_record(add_record);
 
         let new_domain = "example3.com";
         let new_pwd = "password3";
-        let add_record = AddRecordConfig::new(
+        let add_record = RecordOperationConfig::new(
             &user_data.username,
             &user_data.master_pwd,
             new_domain,
             new_pwd,
-            user_data.path.clone(),
+            &user_data.path,
         );
         let _ = user.add_record(add_record);
 
-        let remove_record = RemoveRecordConfig::new(
+        let remove_record = RecordOperationConfig::new(
             &user_data.username,
             &user_data.master_pwd,
             "example2.com",
-            user_data.path.clone(),
+            "",
+            &user_data.path,
         );
         let res = user.remove_record(remove_record);
 
@@ -699,31 +698,32 @@ mod tests {
 
         let new_domain = "example2.com";
         let new_pwd = "password2";
-        let add_record = AddRecordConfig::new(
+        let add_record = RecordOperationConfig::new(
             &user_data.username,
             &user_data.master_pwd,
             new_domain,
             new_pwd,
-            user_data.path.clone(),
+            &user_data.path,
         );
         let _ = user.add_record(add_record);
 
         let new_domain = "example3.com";
         let new_pwd = "password3";
-        let add_record = AddRecordConfig::new(
+        let add_record = RecordOperationConfig::new(
             &user_data.username,
             &user_data.master_pwd,
             new_domain,
             new_pwd,
-            user_data.path.clone(),
+            &user_data.path,
         );
         let _ = user.add_record(add_record);
 
-        let remove_record = RemoveRecordConfig::new(
+        let remove_record = RecordOperationConfig::new(
             &user_data.username,
             &user_data.master_pwd,
             "example2.com",
-            user_data.path.clone(),
+            "",
+            &user_data.path,
         );
         let res = user.remove_record(remove_record);
 
@@ -744,20 +744,21 @@ mod tests {
 
         let new_domain = "example2.com";
         let new_pwd = "password2";
-        let add_record = AddRecordConfig::new(
+        let add_record = RecordOperationConfig::new(
             &user_data.username,
             &user_data.master_pwd,
             new_domain,
             new_pwd,
-            user.path(),
+            &user_data.path,
         );
         let _ = user.add_record(add_record);
 
-        let remove_record = RemoveRecordConfig::new(
+        let remove_record = RecordOperationConfig::new(
             &user_data.username,
             &user_data.master_pwd,
             "example3.com",
-            user.path(),
+            "",
+            &user_data.path,
         );
         let res = user.remove_record(remove_record);
 
@@ -774,20 +775,21 @@ mod tests {
 
         let new_domain = "example2.com";
         let new_pwd = "password2";
-        let add_record = AddRecordConfig::new(
+        let add_record = RecordOperationConfig::new(
             &user_data.username,
             &user_data.master_pwd,
             new_domain,
             new_pwd,
-            user.path(),
+            &user_data.path,
         );
         let _ = user.add_record(add_record);
 
-        let remove_record = RemoveRecordConfig::new(
+        let remove_record = RecordOperationConfig::new(
             &user_data.username,
             "wrong_pwd",
             "example2.com",
-            user.path(),
+            "",
+            &user_data.path,
         );
         let res = user.remove_record(remove_record);
 
@@ -803,17 +805,17 @@ mod tests {
         let mut user = create_user(&user_data).unwrap();
 
         let new_pwd = "password2";
-        let modify_record = ModifyRecordConfig::new(
+        let modify_record = RecordOperationConfig::new(
             &user_data.username,
             &user_data.master_pwd,
             &user_data.domain,
             new_pwd,
-            user.path(),
+            &user_data.path,
         );
         let _ = user.modify_record(modify_record);
 
         let records =
-            Record::read_user(&user.path(), &user_data.username, &user_data.master_pwd).unwrap();
+            Record::read_user(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
         let modified_record = records
             .iter()
             .find(|r| r.domain == Some(user_data.domain.to_string()));

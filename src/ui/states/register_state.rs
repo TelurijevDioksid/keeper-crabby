@@ -10,7 +10,7 @@ use ratatui::{
 };
 
 use crate::{
-    crypto::user::{CreateUserConfig, User},
+    crypto::user::{RecordOperationConfig, User},
     ui::{
         popups::insert_pwd_popup::{DomainPwdInsert, InsertPwd},
         {
@@ -112,12 +112,12 @@ impl DomainPwdInsert for Register {
             return Err("Could not create user.".to_string());
         }
 
-        let config = CreateUserConfig::new(
+        let config = RecordOperationConfig::new(
             &self.username,
             &self.master_password,
             &self.domain,
             &self.pwd,
-            self.path.clone(),
+            &self.path,
         );
 
         // first need to validate config
