@@ -304,16 +304,16 @@ impl User {
 
         // TODO: calibrate offsets or remove them
 
-        self.0 = new_records;
-        self.remove_records();
+        self.remove_records_from_file();
         let path = self.path();
         let mut buffer = vec![];
 
-        for record in self.0.iter() {
+        for record in new_records.iter() {
             record.cypher.write(&mut buffer);
         }
 
         write_to_file(&path, buffer).unwrap();
+        self.0 = new_records;
 
         Ok(())
     }
@@ -420,7 +420,7 @@ impl User {
         true
     }
 
-    fn remove_records(&mut self) {
+    fn remove_records_from_file(&mut self) {
         let path = self.path();
         match clear_file_content(&path) {
             Ok(_) => {}
@@ -699,6 +699,8 @@ mod tests {
         );
         let res = user.remove_record(remove_record);
 
+        let user = User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
+
         let records = user.records();
         let domains = user.domains();
 
@@ -870,5 +872,47 @@ mod tests {
         assert_eq!(modified_record.is_some(), true);
         assert_eq!(modified_record.unwrap().pwd, Some(new_pwd.to_string()));
         assert_eq!(records.len(), 1);
+    }
+
+    #[test]
+    pub fn test_modify_integrity_fail() {
+        let user_data = setup_user_data("example.com").unwrap();
+        let mut user = create_user(&user_data).unwrap();
+
+        let new_pwd = "password2";
+        let modify_record = RecordOperationConfig::new(
+            &user_data.username,
+            "wrong_pwd",
+            &user_data.domain,
+            new_pwd,
+            &user_data.path,
+        );
+        let res = user.modify_record(modify_record);
+
+        // delete the file (user)
+        fs::remove_file(user.path()).unwrap();
+
+        assert_eq!(res.is_err(), true);
+    }
+
+    #[test]
+    pub fn test_modify_record_fail_not_found() {
+        let user_data = setup_user_data("example.com").unwrap();
+        let mut user = create_user(&user_data).unwrap();
+
+        let new_pwd = "password2";
+        let modify_record = RecordOperationConfig::new(
+            &user_data.username,
+            &user_data.master_pwd,
+            "example2.com",
+            new_pwd,
+            &user_data.path,
+        );
+        let res = user.modify_record(modify_record);
+
+        // delete the file (user)
+        fs::remove_file(user.path()).unwrap();
+
+        assert_eq!(res.is_err(), true);
     }
 }
