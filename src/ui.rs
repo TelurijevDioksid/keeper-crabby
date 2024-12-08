@@ -1,4 +1,4 @@
-use std::{error::Error, io, path::PathBuf};
+use std::{cell::RefCell, error::Error, io, path::PathBuf};
 
 use ratatui::{
     backend::{Backend, CrosstermBackend},
@@ -13,98 +13,102 @@ use ratatui::{
 };
 
 use crate::{
-    ui::states::{ScreenState, State},
-    Application, ImutableAppState, MutableAppState,
+    ui::{
+        popups::PopupType,
+        states::{ScreenState, State},
+    },
+    Application,
 };
 
 pub mod components;
 pub mod popups;
 pub mod states;
 
-pub fn ui(
-    f: &mut Frame,
-    immutable_state: &ImutableAppState,
-    mutable_state: &MutableAppState,
-    curr_state: &ScreenState,
-) {
+pub fn ui(f: &mut Frame, app: &Application) {
     let wrapper = Rect::new(0, 0, f.area().width, f.area().height);
     f.render_widget(
         Block::default()
             .borders(Borders::ALL)
-            .title(immutable_state.name),
+            .title(app.immutable_app_state.name.clone()),
         wrapper,
     );
     let rect = centered_rect(f.area(), 97, 94);
-    match &curr_state {
-        ScreenState::Login(s) => s.render(f, immutable_state, mutable_state, rect),
-        ScreenState::StartUp(s) => s.render(f, immutable_state, mutable_state, rect),
-        ScreenState::Register(s) => s.render(f, immutable_state, mutable_state, rect),
-        ScreenState::Home(s) => s.render(f, immutable_state, mutable_state, rect),
+    match &app.state {
+        ScreenState::Login(s) => s.render(f, app, rect),
+        ScreenState::StartUp(s) => {
+            s.render(f, app, rect);
+        }
+        ScreenState::Register(s) => {
+            s.render(f, app, rect);
+        }
+        ScreenState::Home(s) => s.render(f, app, rect),
     }
-    for popup in &mutable_state.popups {
-        popup.render(
-            f,
-            immutable_state,
-            mutable_state,
-            popup.wrapper(rect),
-            curr_state,
-        );
+    for popup in &app.mutable_app_state.popups {
+        popup.render(f, app, popup.wrapper(rect));
     }
 }
 
 fn run_app<B: Backend>(
     terminal: &mut Terminal<B>,
-    immutable_state: &mut ImutableAppState,
-    mutable_state: &mut MutableAppState,
-    curr_state: &mut ScreenState,
+    application: RefCell<Application>,
 ) -> io::Result<bool> {
-    let mut ms_curr = mutable_state.clone();
-    let mut cs_curr = curr_state.clone();
     loop {
-        let should_break = !ms_curr.running;
+        let app = application.borrow();
+        let should_break = !app.mutable_app_state.running;
 
         if should_break {
             break;
         }
 
-        terminal.draw(|f| ui(f, immutable_state, &ms_curr, &cs_curr))?;
+        let _ = terminal.draw(|f| ui(f, &app));
+        drop(app);
 
         if let Event::Key(key) = event::read()? {
             if key.kind == event::KeyEventKind::Release {
                 continue;
             }
-            let ms: MutableAppState;
-            let mut cs = cs_curr.clone();
-            let amount_of_popups = ms_curr.popups.len();
+            let app = application.borrow();
+            let app_copy = app.clone();
+            let amount_of_popups = app_copy.mutable_app_state.popups.len();
+            drop(app);
             if amount_of_popups > 0 {
-                let maybe_cs: Option<ScreenState>;
-                let mscopy = ms_curr.clone();
-                let last_popup = ms_curr.popups.len() - 1;
-                (ms, maybe_cs) =
-                    ms_curr.popups[last_popup].handle_key(immutable_state, &mscopy, &key, &cs_curr);
-                if maybe_cs.is_some() {
-                    cs = maybe_cs.unwrap();
+                let mut app = application.borrow_mut();
+                let (changed_app, last_state) =
+                    app.mutable_app_state.popups[amount_of_popups - 1].handle_key(&key, &app_copy);
+                app.mutable_app_state = changed_app.mutable_app_state;
+                app.state = changed_app.state;
+
+                if let Some(last_state) = last_state {
+                    let mut new_app: Application = app.clone();
+                    match last_state.popup_type() {
+                        PopupType::InsertPwd => match &mut app.state {
+                            ScreenState::Register(s) => {
+                                new_app = s.handle_insert_record_popup(new_app, last_state);
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+
+                    app.mutable_app_state = new_app.mutable_app_state;
+                    app.state = new_app.state;
                 }
             } else {
-                match &mut cs_curr {
-                    states::ScreenState::Login(s) => {
-                        (ms, cs) = s.handle_key(key, immutable_state, &ms_curr);
-                    }
-                    states::ScreenState::StartUp(s) => {
-                        (ms, cs) = s.handle_key(key, immutable_state, &ms_curr);
-                    }
-                    states::ScreenState::Register(s) => {
-                        (ms, cs) = s.handle_key(key, immutable_state, &ms_curr);
-                    }
-                    states::ScreenState::Home(s) => {
-                        (ms, cs) = s.handle_key(key, immutable_state, &ms_curr);
-                    }
-                }
+                let mut app = application.borrow_mut();
+                let changed_app: Application;
+                match &mut app.state {
+                    ScreenState::Login(s) => changed_app = s.handle_key(&key, &app_copy),
+                    ScreenState::StartUp(s) => changed_app = s.handle_key(&key, &app_copy),
+                    ScreenState::Home(s) => changed_app = s.handle_key(&key, &app_copy),
+                    ScreenState::Register(s) => changed_app = s.handle_key(&key, &app_copy),
+                };
+
+                app.mutable_app_state = changed_app.mutable_app_state;
+                app.state = changed_app.state;
             }
-            ms_curr = ms;
-            cs_curr = cs;
         }
-        immutable_state.rect = Some(terminal.get_frame().area());
+        let mut app = application.borrow_mut();
+        app.immutable_app_state.rect = Some(terminal.get_frame().area());
     }
     Ok(true)
 }
@@ -138,14 +142,9 @@ pub fn start(db_path: PathBuf) -> Result<(), Box<dyn Error>> {
     let beckend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(beckend)?;
 
-    let (mut imutable_app_state, mut mutable_app_state, mut state) = Application::create(db_path);
-    imutable_app_state.rect = Some(terminal.get_frame().area());
-    let _res = run_app(
-        &mut terminal,
-        &mut imutable_app_state,
-        &mut mutable_app_state,
-        &mut state,
-    );
+    let rect = terminal.get_frame().area();
+    let app = Application::create(db_path, rect);
+    let _res = run_app(&mut terminal, app);
 
     disable_raw_mode()?;
     execute!(

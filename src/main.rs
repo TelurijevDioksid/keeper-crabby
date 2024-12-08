@@ -1,7 +1,8 @@
 extern crate dotenv;
+extern crate downcast_rs;
 
-use keeper_crabby::{db_init, start};
 use dotenv::dotenv;
+use keeper_crabby::{db_init, start};
 
 fn main() {
     dotenv().ok();

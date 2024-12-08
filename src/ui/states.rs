@@ -1,10 +1,13 @@
 use ratatui::{crossterm::event::KeyEvent, layout::Rect, Frame};
 
 use crate::{
-    ui::states::{
-        home_state::Home, login_state::Login, register_state::Register, startup_state::StartUp,
+    ui::{
+        popups::Popup,
+        states::{
+            home_state::Home, login_state::Login, register_state::Register, startup_state::StartUp,
+        },
     },
-    ImutableAppState, MutableAppState,
+    Application,
 };
 
 pub mod home_state;
@@ -21,17 +24,14 @@ pub enum ScreenState {
 }
 
 pub trait State {
-    fn render(
-        &self,
-        f: &mut Frame,
-        immutable_state: &ImutableAppState,
-        mutable_state: &MutableAppState,
-        rect: Rect,
-    );
-    fn handle_key(
+    fn render(&self, f: &mut Frame, app: &Application, rect: Rect);
+    fn handle_key(&mut self, key: &KeyEvent, app: &Application) -> Application;
+
+    fn handle_insert_record_popup(
         &mut self,
-        key: KeyEvent,
-        immutable_state: &ImutableAppState,
-        mutable_state: &MutableAppState,
-    ) -> (MutableAppState, ScreenState);
+        _app: Application,
+        _popup: Box<dyn Popup>,
+    ) -> Application {
+        unreachable!("This state does not handle insert record popups");
+    }
 }

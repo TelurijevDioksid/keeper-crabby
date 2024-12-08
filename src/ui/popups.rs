@@ -1,30 +1,33 @@
+use downcast_rs::{impl_downcast, Downcast};
+
 use dyn_clone::DynClone;
 use ratatui::{crossterm::event::KeyEvent, layout::Rect, Frame};
 
-use crate::{ui::states::ScreenState, ImutableAppState, MutableAppState};
+use crate::Application;
 
 pub mod exit_popup;
 pub mod insert_pwd_popup;
 pub mod message_popup;
 
-pub trait Popup: DynClone {
-    fn render(
-        &self,
-        f: &mut Frame,
-        immutable_state: &ImutableAppState,
-        mutable_state: &MutableAppState,
-        rect: Rect,
-        current_state: &ScreenState,
-    );
+pub enum PopupType {
+    Exit,
+    InsertPwd,
+    Message,
+}
+
+pub trait Popup: DynClone + Downcast {
+    fn render(&self, f: &mut Frame, app: &Application, rect: Rect);
     fn handle_key(
         &mut self,
-        immutable_state: &ImutableAppState,
-        mutable_state: &MutableAppState,
         key: &KeyEvent,
-        previous_state: &ScreenState,
-    ) -> (MutableAppState, Option<ScreenState>);
+        app: &Application,
+    ) -> (Application, Option<Box<dyn Popup>>);
 
     fn wrapper(&self, rect: Rect) -> Rect;
+
+    fn popup_type(&self) -> PopupType;
 }
 
 dyn_clone::clone_trait_object!(Popup);
+
+impl_downcast!(Popup);

@@ -13,7 +13,7 @@ use crate::{
         components::scrollable_view::ScrollView,
         states::{login_state::Login, State},
     },
-    ImutableAppState, MutableAppState, ScreenState,
+    Application, ScreenState,
 };
 
 const SELECTED_DOMAIN_PWD_BG_COLOR: Color = Color::Rgb(202, 220, 252);
@@ -75,18 +75,9 @@ impl Home {
         }
     }
 
-    fn copy_with_secrets(&self, position: Position, area: Rect) -> Self {
-        Self {
-            user: self.user.clone(),
-            secrets: self.secrets.clone(),
-            position,
-            area,
-        }
-    }
-
-    fn up(&self, area: Rect) -> Self {
+    fn up(&mut self, area: Rect) {
         if self.secrets.selected_secret <= 1 {
-            return self.scroll_to_top(area);
+            return self.scroll_to_top();
         }
         self.set_selected_secret(
             self.secrets.selected_secret - 1,
@@ -95,25 +86,15 @@ impl Home {
         )
     }
 
-    fn scroll_to_top(&self, area: Rect) -> Self {
-        Self {
-            user: self.user.clone(),
-            secrets: Secrets {
-                secrets: self.secrets.secrets.clone(),
-                selected_secret: 0,
-                shown_secrets: self.secrets.shown_secrets.clone(),
-            },
-            position: Position {
-                offset_x: self.position.offset_x,
-                offset_y: 0,
-            },
-            area,
-        }
+    fn scroll_to_top(&mut self) {
+        self.secrets.selected_secret = 0;
+        self.position.offset_y = 0;
     }
 
-    fn down(&self, area: Rect) -> Self {
+    fn down(&mut self, area: Rect) {
         if self.secrets.selected_secret == self.secrets.secrets.len() - 1 {
-            return self.scroll_to_bottom(area);
+            self.scroll_to_bottom(area);
+            return;
         }
         self.set_selected_secret(
             self.secrets.selected_secret + 1,
@@ -122,33 +103,22 @@ impl Home {
         )
     }
 
-    fn scroll_to_bottom(&self, area: Rect) -> Self {
+    fn scroll_to_bottom(&mut self, area: Rect) {
         let (_, inner_buffer_height) = ScrollView::inner_buffer_bounding_box(area);
         let max_offset_y =
             self.buffer_to_render().area().height as i32 - inner_buffer_height as i32 + 1;
         let max_offset_y = if max_offset_y < 0 { 0 } else { max_offset_y };
         let max_offset_y = max_offset_y as u16;
-        Self {
-            user: self.user.clone(),
-            secrets: Secrets {
-                secrets: self.secrets.secrets.clone(),
-                selected_secret: self.secrets.secrets.len() - 1,
-                shown_secrets: self.secrets.shown_secrets.clone(),
-            },
-            position: Position {
-                offset_x: self.position.offset_x,
-                offset_y: max_offset_y,
-            },
-            area,
-        }
+        self.secrets.selected_secret = self.secrets.secrets.len() - 1;
+        self.position.offset_y = max_offset_y;
     }
 
     fn set_selected_secret(
-        &self,
+        &mut self,
         selected_secret: usize,
         previous_selected_secret: usize,
         area: Rect,
-    ) -> Self {
+    ) {
         assert!(selected_secret < self.secrets.secrets.len());
         let (_, inner_buffer_height) = ScrollView::inner_buffer_bounding_box(area);
         let mut position = self.position.clone();
@@ -163,19 +133,11 @@ impl Home {
                 position.offset_y -= DOMAIN_PWD_LIST_ITEM_HEIGHT;
             }
         }
-        Self {
-            user: self.user.clone(),
-            secrets: Secrets {
-                secrets: self.secrets.secrets.clone(),
-                selected_secret,
-                shown_secrets: self.secrets.shown_secrets.clone(),
-            },
-            position,
-            area,
-        }
+        self.secrets.selected_secret = selected_secret;
+        self.position = position;
     }
 
-    fn toggle_shown_secret(&self) -> Self {
+    fn toggle_shown_secret(&mut self) {
         assert!(self.secrets.selected_secret < self.secrets.secrets.len());
 
         let selected_secret = self.secrets.selected_secret;
@@ -186,16 +148,7 @@ impl Home {
             shown_secrets.push(selected_secret);
         }
 
-        Self {
-            user: self.user.clone(),
-            secrets: Secrets {
-                secrets: self.secrets.secrets.clone(),
-                selected_secret: self.secrets.selected_secret,
-                shown_secrets,
-            },
-            position: self.position.clone(),
-            area: self.area,
-        }
+        self.secrets.shown_secrets = shown_secrets;
     }
 
     fn separator(&self, width: u16) -> Text {
@@ -288,14 +241,8 @@ impl Home {
 }
 
 impl State for Home {
-    fn render(
-        &self,
-        f: &mut Frame,
-        immutable_state: &ImutableAppState,
-        _mutable_state: &MutableAppState,
-        area: Rect,
-    ) {
-        match immutable_state.rect {
+    fn render(&self, f: &mut Frame, app: &Application, area: Rect) {
+        match app.immutable_app_state.rect {
             Some(_) => {
                 let mut buffer = f.buffer_mut();
                 let buffer_to_render = self.buffer_to_render();
@@ -305,32 +252,24 @@ impl State for Home {
         }
     }
 
-    fn handle_key(
-        &mut self,
-        key: KeyEvent,
-        immutable_state: &ImutableAppState,
-        mutable_state: &MutableAppState,
-    ) -> (MutableAppState, ScreenState) {
+    fn handle_key(&mut self, key: &KeyEvent, app: &Application) -> Application {
+        let mut app = app.clone();
+        let mut change_state = false;
+
         // TODO: rework this
-        let mut screen_state = ScreenState::Home(self.clone());
         if key.code == KeyCode::Char('q') {
-            screen_state = ScreenState::Login(Login::new(&immutable_state.db_path));
+            app.state = ScreenState::Login(Login::new(&app.immutable_app_state.db_path));
+            change_state = true;
         }
         if key.code == KeyCode::Char('j') {
-            screen_state = ScreenState::Home(self.down(immutable_state.rect.unwrap()));
+            self.down(app.immutable_app_state.rect.unwrap());
         }
         if key.code == KeyCode::Char('k') {
-            screen_state = ScreenState::Home(self.up(immutable_state.rect.unwrap()));
+            self.up(app.immutable_app_state.rect.unwrap());
         }
         if key.code == KeyCode::Char('h') {
             if self.position.offset_x != 0 {
-                screen_state = ScreenState::Home(self.copy_with_secrets(
-                    Position {
-                        offset_x: self.position.offset_x - 1,
-                        offset_y: self.position.offset_y,
-                    },
-                    immutable_state.rect.unwrap(),
-                ));
+                self.position.offset_x -= 1;
             }
         }
         if key.code == KeyCode::Char('l') {
@@ -339,18 +278,20 @@ impl State for Home {
                 &self.buffer_to_render(),
                 self.area,
             ) {
-                screen_state = ScreenState::Home(self.copy_with_secrets(
-                    Position {
-                        offset_x: self.position.offset_x + 1,
-                        offset_y: self.position.offset_y,
-                    },
-                    immutable_state.rect.unwrap(),
-                ));
+                self.position.offset_x += 1;
             }
         }
         if key.code == KeyCode::Enter {
-            screen_state = ScreenState::Home(self.toggle_shown_secret());
+            self.toggle_shown_secret();
         }
-        (mutable_state.clone(), screen_state)
+        if key.code == KeyCode::Char('a') {
+            //TODO: add new record
+        }
+
+        if !change_state {
+            app.state = ScreenState::Home(self.clone());
+        }
+
+        app
     }
 }

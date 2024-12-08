@@ -10,17 +10,10 @@ use ratatui::{
 use crate::{
     ui::{
         centered_rect,
-        popups::{message_popup::MessagePopup, Popup},
-        states::{startup_state::StartUp, ScreenState},
+        popups::{Popup, PopupType},
     },
-    ImutableAppState, MutableAppState,
+    Application,
 };
-
-pub trait DomainPwdInsert {
-    fn set_domain(&self, domain: String) -> Self;
-    fn set_pwd(&self, pwd: String) -> Self;
-    fn confirm(&self) -> Result<(), String>;
-}
 
 #[derive(Clone)]
 pub enum InsertPwdState {
@@ -30,11 +23,18 @@ pub enum InsertPwdState {
     Quit,
 }
 
+#[derive(Clone, PartialEq)]
+pub enum InsertPwdExitState {
+    Confirm,
+    Quit,
+}
+
 #[derive(Clone)]
 pub struct InsertPwd {
     pub domain: String,
     pub pwd: String,
     pub state: InsertPwdState,
+    pub exit_state: Option<InsertPwdExitState>,
     x_percent: u16,
     y_percent: u16,
 }
@@ -45,18 +45,9 @@ impl InsertPwd {
             domain: String::new(),
             pwd: String::new(),
             state: InsertPwdState::Domain,
+            exit_state: None,
             x_percent: 40,
             y_percent: 20,
-        }
-    }
-
-    pub fn copy_with_state(&self, state: InsertPwdState) -> Self {
-        InsertPwd {
-            domain: self.domain.clone(),
-            pwd: self.pwd.clone(),
-            state,
-            x_percent: self.x_percent,
-            y_percent: self.y_percent,
         }
     }
 
@@ -78,14 +69,7 @@ impl InsertPwd {
 }
 
 impl Popup for InsertPwd {
-    fn render(
-        &self,
-        f: &mut Frame,
-        _immutable_state: &ImutableAppState,
-        _mutable_state: &MutableAppState,
-        rect: Rect,
-        _current_state: &ScreenState,
-    ) {
+    fn render(&self, f: &mut Frame, _app: &Application, rect: Rect) {
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![
@@ -139,155 +123,93 @@ impl Popup for InsertPwd {
 
     fn handle_key(
         &mut self,
-        _immutable_state: &ImutableAppState,
-        mutable_state: &MutableAppState,
         key: &KeyEvent,
-        previous_state: &ScreenState,
-    ) -> (MutableAppState, Option<ScreenState>) {
-        let mut mutable_state = mutable_state.clone();
-        let mut screen_state = previous_state.clone();
+        app: &Application,
+    ) -> (Application, Option<Box<dyn Popup>>) {
+        let mut app = app.clone();
+        let mut poped = false;
+
         match self.state {
             InsertPwdState::Domain => match key.code {
                 KeyCode::Char(c) => {
                     self.domain_append(c);
-                    match previous_state {
-                        ScreenState::Register(s) => {
-                            let state = s.set_domain(self.domain.clone());
-                            let insert_pwd = self.clone();
-                            mutable_state.popups.pop();
-                            mutable_state.popups.push(Box::new(insert_pwd));
-                            screen_state = ScreenState::Register(state);
-                        }
-                        _ => {}
-                    }
                 }
                 KeyCode::Backspace => {
                     self.domain_pop();
-                    match previous_state {
-                        ScreenState::Register(s) => {
-                            let state = s.set_domain(self.domain.clone());
-                            let insert_pwd = self.clone();
-                            mutable_state.popups.pop();
-                            mutable_state.popups.push(Box::new(insert_pwd));
-                            screen_state = ScreenState::Register(state);
-                        }
-                        _ => {}
-                    }
                 }
                 KeyCode::Up => {
-                    let insert_pwd = self.copy_with_state(InsertPwdState::Confirm);
-                    mutable_state.popups.pop();
-                    mutable_state.popups.push(Box::new(insert_pwd));
+                    self.state = InsertPwdState::Quit;
                 }
                 KeyCode::Down | KeyCode::Tab | KeyCode::Enter => {
-                    let insert_pwd = self.copy_with_state(InsertPwdState::Pwd);
-                    mutable_state.popups.pop();
-                    mutable_state.popups.push(Box::new(insert_pwd));
+                    self.state = InsertPwdState::Pwd;
                 }
                 _ => {}
             },
             InsertPwdState::Pwd => match key.code {
                 KeyCode::Char(c) => {
                     self.pwd_append(c);
-                    match previous_state {
-                        ScreenState::Register(s) => {
-                            let state = s.set_pwd(self.pwd.clone());
-                            let insert_pwd = self.clone();
-                            mutable_state.popups.pop();
-                            mutable_state.popups.push(Box::new(insert_pwd));
-                            screen_state = ScreenState::Register(state);
-                        }
-                        _ => {}
-                    }
                 }
                 KeyCode::Backspace => {
                     self.pwd_pop();
-                    match previous_state {
-                        ScreenState::Register(s) => {
-                            let state = s.set_pwd(self.pwd.clone());
-                            let insert_pwd = self.clone();
-                            mutable_state.popups.pop();
-                            mutable_state.popups.push(Box::new(insert_pwd));
-                            screen_state = ScreenState::Register(state);
-                        }
-                        _ => {}
-                    }
                 }
                 KeyCode::Up => {
-                    let insert_pwd = self.copy_with_state(InsertPwdState::Domain);
-                    mutable_state.popups.pop();
-                    mutable_state.popups.push(Box::new(insert_pwd));
+                    self.state = InsertPwdState::Domain;
                 }
                 KeyCode::Down | KeyCode::Tab | KeyCode::Enter => {
-                    let insert_pwd = self.copy_with_state(InsertPwdState::Quit);
-                    mutable_state.popups.pop();
-                    mutable_state.popups.push(Box::new(insert_pwd));
+                    self.state = InsertPwdState::Quit;
                 }
                 _ => {}
             },
             InsertPwdState::Quit => match key.code {
                 KeyCode::Enter => {
-                    mutable_state.popups.pop();
+                    app.mutable_app_state.popups.pop();
+                    self.exit_state = Some(InsertPwdExitState::Quit);
+                    poped = true;
                 }
                 KeyCode::Up => {
-                    let insert_pwd = self.copy_with_state(InsertPwdState::Pwd);
-                    mutable_state.popups.pop();
-                    mutable_state.popups.push(Box::new(insert_pwd));
+                    self.state = InsertPwdState::Pwd;
                 }
                 KeyCode::Right | KeyCode::Tab | KeyCode::Left => {
-                    let insert_pwd = self.copy_with_state(InsertPwdState::Confirm);
-                    mutable_state.popups.pop();
-                    mutable_state.popups.push(Box::new(insert_pwd));
+                    self.state = InsertPwdState::Confirm;
                 }
                 KeyCode::Down => {
-                    let insert_pwd = self.copy_with_state(InsertPwdState::Domain);
-                    mutable_state.popups.pop();
-                    mutable_state.popups.push(Box::new(insert_pwd));
+                    self.state = InsertPwdState::Domain;
                 }
                 _ => {}
             },
-            InsertPwdState::Confirm => {
-                match key.code {
-                    KeyCode::Enter => match previous_state {
-                        ScreenState::Register(s) => match s.confirm() {
-                            Ok(_) => {
-                                mutable_state.popups.pop();
-                                screen_state = ScreenState::StartUp(StartUp::new());
-                            }
-                            Err(e) => {
-                                mutable_state.popups.push(Box::new(MessagePopup::new(e, |_immutable_state: &ImutableAppState<'_>, mutable_state: &MutableAppState, _screen_state: &ScreenState| {
-                                    let mut mutable_state = mutable_state.clone();
-                                    mutable_state.popups.pop();
-                                    (mutable_state, None)
-                                })));
-                            }
-                        },
-                        _ => {}
-                    },
-                    KeyCode::Left | KeyCode::Right => {
-                        let insert_pwd = self.copy_with_state(InsertPwdState::Quit);
-                        mutable_state.popups.pop();
-                        mutable_state.popups.push(Box::new(insert_pwd));
-                    }
-                    KeyCode::Down | KeyCode::Tab => {
-                        let insert_pwd = self.copy_with_state(InsertPwdState::Domain);
-                        mutable_state.popups.pop();
-                        mutable_state.popups.push(Box::new(insert_pwd));
-                    }
-                    KeyCode::Up => {
-                        let insert_pwd = self.copy_with_state(InsertPwdState::Pwd);
-                        mutable_state.popups.pop();
-                        mutable_state.popups.push(Box::new(insert_pwd));
-                    }
-                    _ => {}
+            InsertPwdState::Confirm => match key.code {
+                KeyCode::Enter => {
+                    app.mutable_app_state.popups.pop();
+                    self.exit_state = Some(InsertPwdExitState::Confirm);
+                    poped = true;
                 }
-            }
+                KeyCode::Left | KeyCode::Right => {
+                    self.state = InsertPwdState::Quit;
+                }
+                KeyCode::Down | KeyCode::Tab => {
+                    self.state = InsertPwdState::Domain;
+                }
+                KeyCode::Up => {
+                    self.state = InsertPwdState::Pwd;
+                }
+                _ => {}
+            },
         }
 
-        (mutable_state, Some(screen_state))
+        if !poped {
+            app.mutable_app_state.popups.pop();
+            app.mutable_app_state.popups.push(Box::new(self.clone()));
+            return (app, None);
+        }
+
+        (app, Some(Box::new(self.clone())))
     }
 
     fn wrapper(&self, rect: Rect) -> Rect {
         centered_rect(rect, self.x_percent, self.y_percent)
+    }
+
+    fn popup_type(&self) -> PopupType {
+        PopupType::InsertPwd
     }
 }

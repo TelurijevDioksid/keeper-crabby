@@ -21,9 +21,10 @@ use crate::{
             ScreenState, State,
         },
     },
-    ImutableAppState, MutableAppState,
+    Application,
 };
 
+// TODO: change to private (LoginInnerState)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LoginState {
     Username,
@@ -66,17 +67,9 @@ impl Login {
         }
     }
 
-    pub fn copy_with_state(&self, state: LoginState) -> Self {
-        Login {
-            username: self.username.clone(),
-            master_password: self.master_password.clone(),
-            state,
-            path: self.path.clone(),
-        }
-    }
-
     // this needs to be reworked
     // this function should return a vector of cipher configs and a master pwd
+    // or does it?
     pub fn login(&self) -> Result<User, String> {
         let user_exists = check_user(&self.username, self.path.clone());
         if !user_exists {
@@ -93,13 +86,7 @@ impl Login {
 }
 
 impl State for Login {
-    fn render(
-        &self,
-        f: &mut Frame,
-        _immutable_state: &ImutableAppState,
-        _mutable_state: &MutableAppState,
-        rect: Rect,
-    ) {
+    fn render(&self, f: &mut Frame, _app: &Application, rect: Rect) {
         let rect = centered_rect(rect, 50, 40);
         let layout = Layout::default()
             .direction(Direction::Vertical)
@@ -153,68 +140,54 @@ impl State for Login {
         f.render_widget(confirm_p, inner_layout[1]);
     }
 
-    fn handle_key(
-        &mut self,
-        key: KeyEvent,
-        immutable_state: &ImutableAppState,
-        mutable_state: &MutableAppState,
-    ) -> (MutableAppState, ScreenState) {
-        let mut mutable_state = mutable_state.clone();
-        let mut screen_state = ScreenState::Login(self.clone());
+    fn handle_key(&mut self, key: &KeyEvent, app: &Application) -> Application {
+        let mut app = app.clone();
+        let mut change_state = false;
 
         match self.state {
             LoginState::Username => match key.code {
                 KeyCode::Char(c) => {
-                    let mut ss = self.copy_with_state(LoginState::Username);
-                    ss.username_append(c);
-                    screen_state = ScreenState::Login(ss);
+                    self.username_append(c);
                 }
                 KeyCode::Backspace => {
-                    let mut ss = self.copy_with_state(LoginState::Username);
-                    ss.username_pop();
-                    screen_state = ScreenState::Login(ss);
+                    self.username_pop();
                 }
                 KeyCode::Enter | KeyCode::Tab | KeyCode::Down => {
-                    screen_state =
-                        ScreenState::Login(self.copy_with_state(LoginState::MasterPassword));
+                    self.state = LoginState::MasterPassword;
                 }
                 KeyCode::Up => {
-                    screen_state = ScreenState::Login(self.copy_with_state(LoginState::Confirm));
+                    self.state = LoginState::Confirm;
                 }
                 _ => {}
             },
             LoginState::MasterPassword => match key.code {
                 KeyCode::Char(c) => {
-                    let mut ss = self.copy_with_state(LoginState::MasterPassword);
-                    ss.master_password_append(c);
-                    screen_state = ScreenState::Login(ss);
+                    self.master_password_append(c);
                 }
                 KeyCode::Backspace => {
-                    let mut ss = self.copy_with_state(LoginState::MasterPassword);
-                    ss.master_password_pop();
-                    screen_state = ScreenState::Login(ss);
+                    self.master_password_pop();
                 }
                 KeyCode::Enter | KeyCode::Tab | KeyCode::Down => {
-                    screen_state = ScreenState::Login(self.copy_with_state(LoginState::Quit));
+                    self.state = LoginState::Quit;
                 }
                 KeyCode::Up => {
-                    screen_state = ScreenState::Login(self.copy_with_state(LoginState::Username));
+                    self.state = LoginState::Username;
                 }
                 _ => {}
             },
             LoginState::Quit => match key.code {
                 KeyCode::Enter => {
-                    screen_state = ScreenState::StartUp(StartUp::new());
+                    app.state = ScreenState::StartUp(StartUp::new());
+                    change_state = true;
                 }
                 KeyCode::Right | KeyCode::Left | KeyCode::Tab => {
-                    screen_state = ScreenState::Login(self.copy_with_state(LoginState::Confirm));
+                    self.state = LoginState::Confirm;
                 }
                 KeyCode::Up => {
-                    screen_state =
-                        ScreenState::Login(self.copy_with_state(LoginState::MasterPassword));
+                    self.state = LoginState::MasterPassword;
                 }
                 KeyCode::Down => {
-                    screen_state = ScreenState::Login(self.copy_with_state(LoginState::Username));
+                    self.state = LoginState::Username;
                 }
                 _ => {}
             },
@@ -223,38 +196,37 @@ impl State for Login {
                     let data = self.login();
                     match data {
                         Ok(d) => {
-                            screen_state = ScreenState::Home(Home::new(
+                            app.state = ScreenState::Home(Home::new(
                                 d,
                                 Position::default(),
-                                immutable_state.rect.unwrap(),
+                                app.immutable_app_state.rect.unwrap(),
                             ));
+                            change_state = true;
                         }
-                        Err(e) => {
-                            mutable_state.popups.push(Box::new(MessagePopup::new(
-                                e,
-                                |_, mutable_state: &MutableAppState, _| {
-                                    let mut mutable_state = mutable_state.clone();
-                                    mutable_state.popups.pop();
-                                    (mutable_state, None)
-                                },
-                            )));
+                        Err(_) => {
+                            app.mutable_app_state
+                                .popups
+                                .push(Box::new(MessagePopup::new("Cannot login".to_string())));
                         }
                     }
                 }
                 KeyCode::Right | KeyCode::Left => {
-                    screen_state = ScreenState::Login(self.copy_with_state(LoginState::Quit));
+                    self.state = LoginState::Quit;
                 }
                 KeyCode::Up => {
-                    screen_state =
-                        ScreenState::Login(self.copy_with_state(LoginState::MasterPassword));
+                    self.state = LoginState::MasterPassword;
                 }
                 KeyCode::Down | KeyCode::Tab => {
-                    screen_state = ScreenState::Login(self.copy_with_state(LoginState::Username));
+                    self.state = LoginState::Username;
                 }
                 _ => {}
             },
         }
 
-        (mutable_state, screen_state)
+        if !change_state {
+            app.state = ScreenState::Login(self.clone());
+        }
+
+        app
     }
 }

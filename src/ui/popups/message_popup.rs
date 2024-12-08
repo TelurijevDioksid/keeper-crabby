@@ -7,42 +7,26 @@ use ratatui::{
 };
 
 use crate::{
-    ui::{centered_rect, popups::Popup, states::ScreenState},
-    ImutableAppState, MutableAppState,
+    ui::{
+        centered_rect,
+        popups::{Popup, PopupType},
+    },
+    Application,
 };
 
 #[derive(Clone)]
 pub struct MessagePopup {
     pub message: String,
-    on_close: fn(
-        immutable_state: &ImutableAppState,
-        mutable_state: &MutableAppState,
-        previous_state: &ScreenState,
-    ) -> (MutableAppState, Option<ScreenState>),
 }
 
 impl MessagePopup {
-    pub fn new(
-        message: String,
-        on_close: fn(
-            immutable_state: &ImutableAppState,
-            mutable_state: &MutableAppState,
-            previous_state: &ScreenState,
-        ) -> (MutableAppState, Option<ScreenState>),
-    ) -> Self {
-        MessagePopup { message, on_close }
+    pub fn new(message: String) -> Self {
+        MessagePopup { message }
     }
 }
 
 impl Popup for MessagePopup {
-    fn render(
-        &self,
-        f: &mut Frame,
-        _immutable_state: &ImutableAppState,
-        _mutable_state: &MutableAppState,
-        rect: Rect,
-        _current_state: &ScreenState,
-    ) {
+    fn render(&self, f: &mut Frame, _app: &Application, rect: Rect) {
         let message_p = Paragraph::new(self.message.clone())
             .block(
                 Block::bordered()
@@ -58,17 +42,20 @@ impl Popup for MessagePopup {
 
     fn handle_key(
         &mut self,
-        immutable_state: &ImutableAppState,
-        mutable_state: &MutableAppState,
         _key: &KeyEvent,
-        previous_state: &ScreenState,
-    ) -> (MutableAppState, Option<ScreenState>) {
-        let mut mutable_state = mutable_state.clone();
-        mutable_state.popups.pop();
-        (self.on_close)(immutable_state, &mutable_state, previous_state)
+        app: &Application,
+    ) -> (Application, Option<Box<dyn Popup>>) {
+        let mut app = app.clone();
+        app.mutable_app_state.popups.pop();
+
+        (app, None)
     }
 
     fn wrapper(&self, rect: Rect) -> Rect {
         centered_rect(rect, 30, 15)
+    }
+
+    fn popup_type(&self) -> PopupType {
+        PopupType::Message
     }
 }

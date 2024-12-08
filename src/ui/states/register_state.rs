@@ -12,14 +12,18 @@ use ratatui::{
 use crate::{
     crypto::user::{RecordOperationConfig, User},
     ui::{
-        popups::insert_pwd_popup::{DomainPwdInsert, InsertPwd},
+        popups::{
+            insert_pwd_popup::{InsertPwd, InsertPwdExitState},
+            message_popup::MessagePopup,
+            Popup,
+        },
         {
             centered_rect,
             states::{startup_state::StartUp, ScreenState},
             State,
         },
     },
-    ImutableAppState, MutableAppState,
+    Application,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -27,8 +31,6 @@ pub enum RegisterState {
     Username,
     MasterPassword,
     ConfirmMasterPassword,
-    Domain,
-    Pwd,
     Confirm,
     Quit,
 }
@@ -57,18 +59,6 @@ impl Register {
         }
     }
 
-    pub fn copy_with_state(&self, state: RegisterState) -> Self {
-        Register {
-            username: self.username.clone(),
-            master_password: self.master_password.clone(),
-            confirm_master_password: self.confirm_master_password.clone(),
-            state,
-            domain: self.domain.clone(),
-            pwd: self.pwd.clone(),
-            path: self.path.clone(),
-        }
-    }
-
     pub fn username_append(&mut self, c: char) {
         self.username.push(c);
     }
@@ -94,52 +84,8 @@ impl Register {
     }
 }
 
-impl DomainPwdInsert for Register {
-    fn set_pwd(&self, pwd: String) -> Register {
-        let mut ss = self.clone();
-        ss.pwd = pwd;
-        ss
-    }
-
-    fn set_domain(&self, domain: String) -> Register {
-        let mut ss = self.clone();
-        ss.domain = domain;
-        ss
-    }
-
-    fn confirm(&self) -> Result<(), String> {
-        if self.master_password != self.confirm_master_password {
-            return Err("Could not create user.".to_string());
-        }
-
-        let config = RecordOperationConfig::new(
-            &self.username,
-            &self.master_password,
-            &self.domain,
-            &self.pwd,
-            &self.path,
-        );
-
-        // first need to validate config
-        // match config.validate() ...
-
-        let res = User::new(&config);
-
-        match res {
-            Ok(_) => Ok(()),
-            Err(e) => Err(e),
-        }
-    }
-}
-
 impl State for Register {
-    fn render(
-        &self,
-        f: &mut Frame,
-        _immutable_state: &ImutableAppState,
-        _mutable_state: &MutableAppState,
-        rect: Rect,
-    ) {
+    fn render(&self, f: &mut Frame, _app: &Application, rect: Rect) {
         // need to create input widget
         // this is a temporary solution
         let rect = centered_rect(rect, 50, 40);
@@ -209,119 +155,159 @@ impl State for Register {
         f.render_widget(register_p, inner_layout[1]);
     }
 
-    fn handle_key(
-        &mut self,
-        key: KeyEvent,
-        _immutable_state: &ImutableAppState,
-        mutable_state: &MutableAppState,
-    ) -> (MutableAppState, ScreenState) {
-        let mut mutable_state = mutable_state.clone();
-        let mut screen_state = ScreenState::Register(self.clone());
+    fn handle_key(&mut self, key: &KeyEvent, app: &Application) -> Application {
+        let mut app = app.clone();
+        let mut change_state = false;
 
         match self.state {
             RegisterState::Username => match key.code {
                 KeyCode::Char(c) => {
-                    let mut ss = self.copy_with_state(RegisterState::Username);
-                    ss.username_append(c);
-                    screen_state = ScreenState::Register(ss);
+                    self.username_append(c);
                 }
                 KeyCode::Backspace => {
-                    let mut ss = self.copy_with_state(RegisterState::Username);
-                    ss.username_pop();
-                    screen_state = ScreenState::Register(ss);
+                    self.username_pop();
                 }
                 KeyCode::Enter | KeyCode::Tab | KeyCode::Down => {
-                    screen_state =
-                        ScreenState::Register(self.copy_with_state(RegisterState::MasterPassword));
+                    self.state = RegisterState::MasterPassword;
                 }
                 KeyCode::Up => {
-                    screen_state =
-                        ScreenState::Register(self.copy_with_state(RegisterState::Confirm));
+                    self.state = RegisterState::Confirm;
                 }
                 _ => {}
             },
             RegisterState::MasterPassword => match key.code {
                 KeyCode::Char(c) => {
-                    let mut ss = self.copy_with_state(RegisterState::MasterPassword);
-                    ss.master_password_append(c);
-                    screen_state = ScreenState::Register(ss);
+                    self.master_password_append(c);
                 }
                 KeyCode::Backspace => {
-                    let mut ss = self.copy_with_state(RegisterState::MasterPassword);
-                    ss.master_password_pop();
-                    screen_state = ScreenState::Register(ss);
+                    self.master_password_pop();
                 }
                 KeyCode::Enter | KeyCode::Tab | KeyCode::Down => {
-                    screen_state = ScreenState::Register(
-                        self.copy_with_state(RegisterState::ConfirmMasterPassword),
-                    );
+                    self.state = RegisterState::ConfirmMasterPassword;
                 }
                 KeyCode::Up => {
-                    screen_state =
-                        ScreenState::Register(self.copy_with_state(RegisterState::Username));
+                    self.state = RegisterState::Username;
                 }
                 _ => {}
             },
             RegisterState::ConfirmMasterPassword => match key.code {
                 KeyCode::Char(c) => {
-                    let mut ss = self.copy_with_state(RegisterState::ConfirmMasterPassword);
-                    ss.confirm_master_password_append(c);
-                    screen_state = ScreenState::Register(ss);
+                    self.confirm_master_password_append(c);
                 }
                 KeyCode::Backspace => {
-                    let mut ss = self.copy_with_state(RegisterState::ConfirmMasterPassword);
-                    ss.confirm_master_password_pop();
-                    screen_state = ScreenState::Register(ss);
+                    self.confirm_master_password_pop();
                 }
                 KeyCode::Enter | KeyCode::Tab | KeyCode::Down => {
-                    screen_state = ScreenState::Register(self.copy_with_state(RegisterState::Quit));
+                    self.state = RegisterState::Quit;
                 }
                 KeyCode::Up => {
-                    screen_state =
-                        ScreenState::Register(self.copy_with_state(RegisterState::MasterPassword));
+                    self.state = RegisterState::MasterPassword;
                 }
                 _ => {}
             },
             RegisterState::Quit => match key.code {
                 KeyCode::Enter => {
-                    screen_state = ScreenState::StartUp(StartUp::new());
+                    app.state = ScreenState::StartUp(StartUp::new());
+                    change_state = true;
                 }
                 KeyCode::Right | KeyCode::Left | KeyCode::Tab => {
-                    screen_state =
-                        ScreenState::Register(self.copy_with_state(RegisterState::Confirm));
+                    self.state = RegisterState::Confirm;
                 }
                 KeyCode::Up => {
-                    screen_state = ScreenState::Register(
-                        self.copy_with_state(RegisterState::ConfirmMasterPassword),
-                    );
+                    self.state = RegisterState::ConfirmMasterPassword;
                 }
                 KeyCode::Down => {
-                    screen_state =
-                        ScreenState::Register(self.copy_with_state(RegisterState::Username));
+                    self.state = RegisterState::Username;
                 }
                 _ => {}
             },
             RegisterState::Confirm => match key.code {
                 KeyCode::Enter => {
-                    mutable_state.popups.push(Box::new(InsertPwd::new()));
+                    app.mutable_app_state
+                        .popups
+                        .push(Box::new(InsertPwd::new()));
+                    change_state = true;
                 }
                 KeyCode::Right | KeyCode::Left => {
-                    screen_state = ScreenState::Register(self.copy_with_state(RegisterState::Quit));
+                    self.state = RegisterState::Quit;
                 }
                 KeyCode::Up => {
-                    screen_state = ScreenState::Register(
-                        self.copy_with_state(RegisterState::ConfirmMasterPassword),
-                    );
+                    self.state = RegisterState::ConfirmMasterPassword;
                 }
                 KeyCode::Down | KeyCode::Tab => {
-                    screen_state =
-                        ScreenState::Register(self.copy_with_state(RegisterState::Username));
+                    self.state = RegisterState::Username;
                 }
                 _ => {}
             },
-            _ => {}
         }
 
-        (mutable_state, screen_state)
+        if !change_state {
+            app.state = ScreenState::Register(self.clone());
+        }
+
+        app
+    }
+
+    fn handle_insert_record_popup(
+        &mut self,
+        app: Application,
+        _popup: Box<dyn Popup>,
+    ) -> Application {
+        if self.master_password != self.confirm_master_password {
+            let mut app = app.clone();
+            app.mutable_app_state
+                .popups
+                .push(Box::new(MessagePopup::new(
+                    "Could not create user.".to_string(),
+                )));
+            return app;
+        }
+
+        let domain: String;
+        let pwd: String;
+        let insert_pwd = _popup.downcast::<InsertPwd>();
+
+        match insert_pwd {
+            Ok(insert_pwd) => {
+                if insert_pwd.exit_state == Some(InsertPwdExitState::Quit) {
+                    return app;
+                }
+                domain = insert_pwd.domain.clone();
+                pwd = insert_pwd.pwd.clone();
+            }
+            Err(_) => {
+                unreachable!();
+            }
+        }
+
+        let mut app = app.clone();
+
+        let config = RecordOperationConfig::new(
+            &self.username,
+            &self.master_password,
+            &domain,
+            &pwd,
+            &self.path,
+        );
+
+        // first need to validate config
+        // match config.validate() ...
+
+        let res = User::new(&config);
+
+        match res {
+            Ok(_) => {
+                app.state = ScreenState::StartUp(StartUp::new());
+            }
+            Err(_) => {
+                app.mutable_app_state
+                    .popups
+                    .push(Box::new(MessagePopup::new(
+                        "Could not create user.".to_string(),
+                    )));
+            }
+        }
+
+        app
     }
 }

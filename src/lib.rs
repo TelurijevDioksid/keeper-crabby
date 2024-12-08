@@ -1,5 +1,5 @@
 use ratatui::prelude::Rect;
-use std::path::PathBuf;
+use std::{cell::RefCell, path::PathBuf};
 
 use ui::{
     popups::Popup,
@@ -14,27 +14,32 @@ pub use crypto::hash;
 pub use db::{clear_file_content, create_file, init as db_init};
 pub use ui::start;
 
-pub struct Application {}
+#[derive(Clone)]
+pub struct Application {
+    immutable_app_state: ImmutableAppState,
+    mutable_app_state: MutableAppState,
+    state: ScreenState,
+}
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ImutableAppState<'a> {
-    pub name: &'a str,
+struct ImmutableAppState {
+    pub name: String,
     pub db_path: PathBuf,
     pub rect: Option<Rect>,
 }
 
 #[derive(Clone)]
-pub struct MutableAppState {
+struct MutableAppState {
     pub popups: Vec<Box<dyn Popup>>,
     pub running: bool,
 }
 
 impl Application {
-    fn create(db_path: PathBuf) -> (ImutableAppState<'static>, MutableAppState, ScreenState) {
-        let imutable_app_state = ImutableAppState {
-            name: "Keeper Crabby",
+    fn create(db_path: PathBuf, rect: Rect) -> RefCell<Self> {
+        let immutable_app_state = ImmutableAppState {
+            name: "Keeper Crabby".to_string(),
             db_path,
-            rect: None,
+            rect: Some(rect),
         };
 
         let mutable_app_state = MutableAppState {
@@ -43,6 +48,10 @@ impl Application {
         };
 
         let state = ScreenState::StartUp(StartUp::new());
-        (imutable_app_state, mutable_app_state, state)
+        RefCell::new(Self {
+            immutable_app_state,
+            mutable_app_state,
+            state,
+        })
     }
 }

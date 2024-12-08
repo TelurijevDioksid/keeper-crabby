@@ -12,7 +12,7 @@ use crate::{
         centered_rect,
         states::{login_state::Login, register_state::Register, ScreenState, State},
     },
-    ImutableAppState, MutableAppState,
+    Application,
 };
 
 #[derive(Clone)]
@@ -33,20 +33,10 @@ impl StartUp {
             state: StartUpState::Login,
         }
     }
-
-    pub fn new_with_state(state: StartUpState) -> Self {
-        StartUp { state }
-    }
 }
 
 impl State for StartUp {
-    fn render(
-        &self,
-        f: &mut Frame,
-        _immutable_state: &ImutableAppState,
-        _mutable_state: &MutableAppState,
-        rect: Rect,
-    ) {
+    fn render(&self, f: &mut Frame, _app: &Application, rect: Rect) {
         let rect = centered_rect(rect, 50, 40);
         let layout = Layout::default()
             .direction(Direction::Vertical)
@@ -101,65 +91,61 @@ impl State for StartUp {
         f.render_widget(quit_p, layout[2]);
     }
 
-    fn handle_key(
-        &mut self,
-        key: KeyEvent,
-        immutable_state: &ImutableAppState,
-        mutable_state: &MutableAppState,
-    ) -> (MutableAppState, ScreenState) {
-        let mut mutable_state = mutable_state.clone();
-        let mut screen_state = ScreenState::StartUp(self.clone());
+    fn handle_key(&mut self, key: &KeyEvent, app: &Application) -> Application {
+        let mut app = app.clone();
+        let mut change_state = false;
 
         if key.code == KeyCode::Char('q') {
-            mutable_state.running = false;
-            return (mutable_state, screen_state);
+            app.mutable_app_state.running = false;
+            return app;
         }
 
         match self.state {
             StartUpState::Login => match key.code {
                 KeyCode::Enter => {
-                    screen_state = ScreenState::Login(Login::new(&immutable_state.db_path));
+                    app.state = ScreenState::Login(Login::new(&app.immutable_app_state.db_path));
+                    change_state = true;
                 }
                 KeyCode::Down | KeyCode::Tab | KeyCode::Char('j') => {
-                    screen_state =
-                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Register));
+                    self.state = StartUpState::Register;
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
-                    screen_state =
-                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Quit));
+                    self.state = StartUpState::Quit;
                 }
                 _ => {}
             },
             StartUpState::Register => match key.code {
                 KeyCode::Enter => {
-                    screen_state = ScreenState::Register(Register::new(&immutable_state.db_path));
+                    app.state =
+                        ScreenState::Register(Register::new(&app.immutable_app_state.db_path));
+                    change_state = true;
                 }
                 KeyCode::Down | KeyCode::Tab | KeyCode::Char('j') => {
-                    screen_state =
-                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Quit));
+                    self.state = StartUpState::Quit;
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
-                    screen_state =
-                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Login));
+                    self.state = StartUpState::Login;
                 }
                 _ => {}
             },
             StartUpState::Quit => match key.code {
                 KeyCode::Enter => {
-                    mutable_state.running = false;
+                    app.mutable_app_state.running = false;
                 }
                 KeyCode::Down | KeyCode::Tab | KeyCode::Char('j') => {
-                    screen_state =
-                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Login));
+                    self.state = StartUpState::Login;
                 }
                 KeyCode::Up | KeyCode::Char('k') => {
-                    screen_state =
-                        ScreenState::StartUp(StartUp::new_with_state(StartUpState::Register));
+                    self.state = StartUpState::Register;
                 }
                 _ => {}
             },
         }
 
-        (mutable_state, screen_state)
+        if !change_state {
+            app.state = ScreenState::StartUp(self.clone());
+        }
+
+        app
     }
 }

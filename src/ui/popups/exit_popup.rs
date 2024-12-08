@@ -7,8 +7,11 @@ use ratatui::{
 };
 
 use crate::{
-    ui::{centered_rect, popups::Popup, states::ScreenState},
-    ImutableAppState, MutableAppState,
+    ui::{
+        centered_rect,
+        popups::{Popup, PopupType},
+    },
+    Application,
 };
 
 #[derive(Clone)]
@@ -27,14 +30,7 @@ impl Exit {
 }
 
 impl Popup for Exit {
-    fn render(
-        &self,
-        f: &mut Frame,
-        _immutable_state: &ImutableAppState,
-        _mutable_state: &MutableAppState,
-        rect: Rect,
-        _current_state: &ScreenState,
-    ) {
+    fn render(&self, f: &mut Frame, _app: &Application, rect: Rect) {
         let block = Block::default()
             .title("Press q to exit")
             .borders(Borders::ALL)
@@ -45,22 +41,25 @@ impl Popup for Exit {
 
     fn handle_key(
         &mut self,
-        _immutable_state: &ImutableAppState,
-        mutable_state: &MutableAppState,
         key: &KeyEvent,
-        _previous_state: &ScreenState,
-    ) -> (MutableAppState, Option<ScreenState>) {
-        let mut mutable_state = mutable_state.clone();
+        app: &Application,
+    ) -> (Application, Option<Box<dyn Popup>>) {
+        let mut app = app.clone();
         match key.code {
             KeyCode::Char('q') => {
-                mutable_state.running = false;
+                app.mutable_app_state.running = false;
             }
             _ => {}
         }
-        (mutable_state, None)
+
+        (app, None)
     }
 
     fn wrapper(&self, rect: Rect) -> Rect {
         centered_rect(rect, self.x_percent, self.y_percent)
+    }
+
+    fn popup_type(&self) -> PopupType {
+        PopupType::Exit
     }
 }
