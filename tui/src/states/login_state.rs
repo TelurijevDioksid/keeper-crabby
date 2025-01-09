@@ -10,16 +10,15 @@ use ratatui::{
     Frame,
 };
 
+use keeper_crabby_backend::{check_user, user::User};
+
 use crate::{
-    crypto::{check_user, user::User},
-    ui::{
-        centered_rect,
-        popups::message_popup::MessagePopup,
-        states::{
-            home_state::{Home, Position},
-            startup_state::StartUp,
-            ScreenState, State,
-        },
+    centered_rect,
+    popups::message_popup::MessagePopup,
+    states::{
+        home_state::{Home, Position},
+        startup_state::StartUp,
+        ScreenState, State,
     },
     Application,
 };

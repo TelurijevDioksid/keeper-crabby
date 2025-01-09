@@ -5,11 +5,7 @@ use aes_gcm_siv::{
 use scrypt::{password_hash::SaltString, scrypt, Params};
 use std::{fs, mem::size_of, path::PathBuf, str};
 
-use crate::{
-    clear_file_content, create_file,
-    db::{append_to_file, write_to_file},
-    hash,
-};
+use crate::{append_to_file, clear_file_content, create_file, hash, write_to_file};
 
 pub use super::models::RecordOperationConfig;
 

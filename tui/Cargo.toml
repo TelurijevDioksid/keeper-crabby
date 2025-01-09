@@ -1,0 +1,15 @@
+[package]
+name = "keeper_crabby"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+keeper_crabby_backend = { path = "../backend" }
+ratatui = "0.28.0"
+downcast-rs = "1.2.1"
+dyn-clone = "1.0.17"
+dotenv = "0.15.0"
+
+[[bin]]
+name = "keeper_crabby"
+path = "src/main.rs"

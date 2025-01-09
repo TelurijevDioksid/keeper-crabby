@@ -8,10 +8,8 @@ use ratatui::{
 };
 
 use crate::{
-    ui::{
-        centered_rect,
-        popups::{Popup, PopupType},
-    },
+    centered_rect,
+    popups::{Popup, PopupType},
     Application,
 };
 

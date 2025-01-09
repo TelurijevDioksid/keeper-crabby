@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Borders, Widget},
 };
 
-use crate::ui::{centered_rect, states::home_state::Position};
+use crate::{centered_rect, states::home_state::Position};
 
 pub struct ScrollView {}
 

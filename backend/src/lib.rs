@@ -1,10 +1,15 @@
 use directories::ProjectDirs;
+use sha2::{Digest, Sha256};
 use std::{
     fs::OpenOptions,
     fs::{self, File},
     io::{self, Write},
     path::{Path, PathBuf},
+    str,
 };
+
+mod models;
+pub mod user;
 
 const DB_DIR: &str = "keeper-crabby";
 
@@ -37,6 +42,21 @@ pub fn init() -> Result<PathBuf, io::Error> {
     } else {
         panic!("Could not get project directories");
     }
+}
+
+pub fn check_user(username: &str, path: PathBuf) -> bool {
+    let hashed_username = hash(username.to_string());
+    match path.join(hashed_username).exists() {
+        true => true,
+        false => false,
+    }
+}
+
+pub fn hash(data: String) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(data);
+    let result = hasher.finalize();
+    format!("{:x}", result)
 }
 
 pub fn create_file(p: &PathBuf, file_name: &str) -> io::Result<PathBuf> {

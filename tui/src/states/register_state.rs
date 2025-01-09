@@ -9,21 +9,20 @@ use ratatui::{
     Frame,
 };
 
+use keeper_crabby_backend::user::{RecordOperationConfig, User};
+
 use crate::{
-    crypto::user::{RecordOperationConfig, User},
-    ui::{
-        popups::{
-            insert_pwd_popup::{InsertPwd, InsertPwdExitState},
-            message_popup::MessagePopup,
-            Popup,
-        },
-        {
-            centered_rect,
-            states::{startup_state::StartUp, ScreenState},
-            State,
-        },
+    popups::{
+        insert_pwd_popup::{InsertPwd, InsertPwdExitState},
+        message_popup::MessagePopup,
+        Popup,
     },
     Application,
+    {
+        centered_rect,
+        states::{startup_state::StartUp, ScreenState},
+        State,
+    },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]

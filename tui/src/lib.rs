@@ -13,11 +13,8 @@ use ratatui::{
 };
 
 use crate::{
-    ui::{
-        popups::PopupType,
-        states::{ScreenState, State},
-    },
-    Application,
+    popups::{Popup, PopupType},
+    states::{startup_state::StartUp, ScreenState, State},
 };
 
 pub mod components;
@@ -155,4 +152,46 @@ pub fn start(db_path: PathBuf) -> Result<(), Box<dyn Error>> {
     terminal.show_cursor()?;
 
     Ok(())
+}
+
+#[derive(Clone)]
+pub struct Application {
+    immutable_app_state: ImmutableAppState,
+    mutable_app_state: MutableAppState,
+    state: ScreenState,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct ImmutableAppState {
+    pub name: String,
+    pub db_path: PathBuf,
+    pub rect: Option<Rect>,
+}
+
+#[derive(Clone)]
+struct MutableAppState {
+    pub popups: Vec<Box<dyn Popup>>,
+    pub running: bool,
+}
+
+impl Application {
+    fn create(db_path: PathBuf, rect: Rect) -> RefCell<Self> {
+        let immutable_app_state = ImmutableAppState {
+            name: "Keeper Crabby".to_string(),
+            db_path,
+            rect: Some(rect),
+        };
+
+        let mutable_app_state = MutableAppState {
+            popups: Vec::new(),
+            running: true,
+        };
+
+        let state = ScreenState::StartUp(StartUp::new());
+        RefCell::new(Self {
+            immutable_app_state,
+            mutable_app_state,
+            state,
+        })
+    }
 }

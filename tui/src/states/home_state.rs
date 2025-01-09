@@ -7,12 +7,11 @@ use ratatui::{
     Frame,
 };
 
+use keeper_crabby_backend::user::User;
+
 use crate::{
-    crypto::user::User,
-    ui::{
-        components::scrollable_view::ScrollView,
-        states::{login_state::Login, State},
-    },
+    components::scrollable_view::ScrollView,
+    states::{login_state::Login, State},
     Application, ScreenState,
 };
 

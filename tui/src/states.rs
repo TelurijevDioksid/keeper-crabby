@@ -1,11 +1,9 @@
 use ratatui::{crossterm::event::KeyEvent, layout::Rect, Frame};
 
 use crate::{
-    ui::{
-        popups::Popup,
-        states::{
-            home_state::Home, login_state::Login, register_state::Register, startup_state::StartUp,
-        },
+    popups::Popup,
+    states::{
+        home_state::Home, login_state::Login, register_state::Register, startup_state::StartUp,
     },
     Application,
 };

@@ -8,10 +8,8 @@ use ratatui::{
 };
 
 use crate::{
-    ui::{
-        centered_rect,
-        states::{login_state::Login, register_state::Register, ScreenState, State},
-    },
+    centered_rect,
+    states::{login_state::Login, register_state::Register, ScreenState, State},
     Application,
 };
 
