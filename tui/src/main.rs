@@ -2,9 +2,9 @@ extern crate dotenv;
 extern crate downcast_rs;
 
 use dotenv::dotenv;
-use keeper_crabby_backend::init;
+use krab_backend::init;
 
-use keeper_crabby::start;
+use krab::start;
 
 fn main() {
     dotenv().ok();

@@ -9,7 +9,7 @@ use ratatui::{
     Frame,
 };
 
-use keeper_crabby_backend::user::{RecordOperationConfig, User};
+use krab_backend::user::{RecordOperationConfig, User};
 
 use crate::{
     popups::{

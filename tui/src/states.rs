@@ -32,4 +32,12 @@ pub trait State {
     ) -> Application {
         unreachable!("This state does not handle insert record popups");
     }
+
+    fn handle_insert_master_popup(
+        &mut self,
+        _app: Application,
+        _popup: Box<dyn Popup>,
+    ) -> Application {
+        unreachable!("This state does not handle insert master popups");
+    }
 }

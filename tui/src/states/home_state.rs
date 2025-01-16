@@ -7,10 +7,16 @@ use ratatui::{
     Frame,
 };
 
-use keeper_crabby_backend::user::User;
+use krab_backend::user::{RecordOperationConfig, User};
 
 use crate::{
     components::scrollable_view::ScrollView,
+    popups::{
+        insert_master_popup::{InsertMaster, InsertMasterExitState},
+        insert_pwd_popup::{InsertPwd, InsertPwdExitState},
+        message_popup::MessagePopup,
+        Popup,
+    },
     states::{login_state::Login, State},
     Application, ScreenState,
 };
@@ -36,6 +42,19 @@ fn hidden_value(domain: String) -> String {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+enum Operation {
+    Add,
+    Remove,
+    Modify,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct NewSecret {
+    domain: String,
+    pwd: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Secrets {
     pub secrets: Vec<(String, String)>,
     pub selected_secret: usize,
@@ -54,6 +73,8 @@ pub struct Home {
     pub secrets: Secrets,
     pub position: Position,
     pub area: Rect,
+    new_secret: Option<NewSecret>,
+    operation: Option<Operation>,
 }
 
 impl Home {
@@ -71,6 +92,8 @@ impl Home {
                 offset_y: position.offset_y,
             },
             area,
+            new_secret: None,
+            operation: None,
         }
     }
 
@@ -284,7 +307,16 @@ impl State for Home {
             self.toggle_shown_secret();
         }
         if key.code == KeyCode::Char('a') {
-            //TODO: add new record
+            app.mutable_app_state
+                .popups
+                .push(Box::new(InsertPwd::new()));
+            self.operation = Some(Operation::Add);
+        }
+        if key.code == KeyCode::Char('d') {
+            app.mutable_app_state
+                .popups
+                .push(Box::new(InsertMaster::new()));
+            self.operation = Some(Operation::Remove);
         }
 
         if !change_state {
@@ -292,5 +324,159 @@ impl State for Home {
         }
 
         app
+    }
+
+    fn handle_insert_record_popup(
+        &mut self,
+        app: Application,
+        _popup: Box<dyn Popup>,
+    ) -> Application {
+        let domain: String;
+        let pwd: String;
+        let insert_pwd = _popup.downcast::<InsertPwd>();
+
+        match insert_pwd {
+            Ok(insert_pwd) => {
+                if insert_pwd.exit_state == Some(InsertPwdExitState::Quit) {
+                    return app;
+                }
+                domain = insert_pwd.domain.clone();
+                pwd = insert_pwd.pwd.clone();
+            }
+            Err(_) => {
+                unreachable!();
+            }
+        }
+
+        if domain.is_empty() || pwd.is_empty() {
+            let mut app = app.clone();
+            app.mutable_app_state
+                .popups
+                .push(Box::new(MessagePopup::new(
+                    "Cannot create record".to_string(),
+                )));
+            return app;
+        }
+
+        self.new_secret = Some(NewSecret {
+            domain: domain.clone(),
+            pwd: pwd.clone(),
+        });
+
+        let mut app = app.clone();
+
+        app.state = ScreenState::Home(self.clone());
+
+        app.mutable_app_state
+            .popups
+            .push(Box::new(InsertMaster::new()));
+
+        app
+    }
+
+    fn handle_insert_master_popup(
+        &mut self,
+        app: Application,
+        _popup: Box<dyn Popup>,
+    ) -> Application {
+        let master_password: String;
+        let insert_master = _popup.downcast::<InsertMaster>();
+
+        match insert_master {
+            Ok(insert_master) => {
+                if insert_master.exit_state == Some(InsertMasterExitState::Quit) {
+                    return app;
+                }
+                master_password = insert_master.master.clone();
+            }
+            Err(_) => {
+                unreachable!();
+            }
+        }
+
+        if master_password.is_empty() {
+            let mut app = app.clone();
+            app.mutable_app_state
+                .popups
+                .push(Box::new(MessagePopup::new(
+                    "Cannot create record".to_string(),
+                )));
+            return app;
+        }
+
+        match self.operation {
+            None => {
+                unreachable!();
+            }
+            Some(Operation::Add) => {
+                let config = RecordOperationConfig::new(
+                    &self.user.username(),
+                    &master_password,
+                    &self.new_secret.clone().unwrap().domain,
+                    &self.new_secret.clone().unwrap().pwd,
+                    &app.immutable_app_state.db_path,
+                );
+
+                let res = self.user.add_record(config);
+
+                if res.is_err() {
+                    let mut app = app.clone();
+                    app.mutable_app_state
+                        .popups
+                        .push(Box::new(MessagePopup::new(
+                            "Cannot create record".to_string(),
+                        )));
+                    return app;
+                }
+
+                self.secrets = Secrets {
+                    secrets: self.user.records().iter().map(|x| x.secret()).collect(),
+                    selected_secret: self.secrets.selected_secret,
+                    shown_secrets: self.secrets.shown_secrets.clone(),
+                };
+
+                let mut app = app.clone();
+                app.state = ScreenState::Home(self.clone());
+                app
+            }
+            Some(Operation::Remove) => {
+                let current_secret = self
+                    .secrets
+                    .secrets
+                    .get(self.secrets.selected_secret)
+                    .unwrap();
+
+                let config = RecordOperationConfig::new(
+                    &self.user.username(),
+                    &master_password,
+                    &current_secret.0,
+                    "",
+                    &app.immutable_app_state.db_path,
+                );
+
+                let res = self.user.remove_record(config);
+
+                if res.is_err() {
+                    let mut app = app.clone();
+                    app.mutable_app_state
+                        .popups
+                        .push(Box::new(MessagePopup::new(
+                            "Cannot remove record".to_string(),
+                        )));
+                    return app;
+                }
+
+                self.secrets = Secrets {
+                    secrets: self.user.records().iter().map(|x| x.secret()).collect(),
+                    selected_secret: self.secrets.selected_secret,
+                    shown_secrets: self.secrets.shown_secrets.clone(),
+                };
+
+                let mut app = app.clone();
+                app.state = ScreenState::Home(self.clone());
+                app
+            }
+            Some(Operation::Modify) => app,
+        }
     }
 }

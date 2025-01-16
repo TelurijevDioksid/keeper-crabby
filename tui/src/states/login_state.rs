@@ -10,7 +10,7 @@ use ratatui::{
     Frame,
 };
 
-use keeper_crabby_backend::{check_user, user::User};
+use krab_backend::{check_user, user::User};
 
 use crate::{
     centered_rect,

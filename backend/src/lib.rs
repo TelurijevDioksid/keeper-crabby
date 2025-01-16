@@ -1,8 +1,8 @@
 use directories::ProjectDirs;
 use sha2::{Digest, Sha256};
 use std::{
-    fs::OpenOptions,
-    fs::{self, File},
+    env,
+    fs::{self, File, OpenOptions},
     io::{self, Write},
     path::{Path, PathBuf},
     str,
@@ -11,7 +11,8 @@ use std::{
 mod models;
 pub mod user;
 
-const DB_DIR: &str = "keeper-crabby";
+const DB_DIR: &str = "krab";
+const RELEASE_SUFFIX: &str = "release";
 
 fn create_parent_dir(p: &Path) -> io::Result<()> {
     match p.parent() {
@@ -33,9 +34,10 @@ fn create_if_not_exists(p: &Path) -> io::Result<()> {
 
 pub fn init() -> Result<PathBuf, io::Error> {
     if let Some(proj_dirs) = ProjectDirs::from("", "", DB_DIR) {
-        let proj_dirs = proj_dirs.data_dir();
+        let sub_dir = env::var("KRAB_DIR").unwrap_or(RELEASE_SUFFIX.to_string());
+        let proj_dirs = proj_dirs.data_dir().join(sub_dir);
         if !proj_dirs.is_dir() {
-            let res = create_if_not_exists(proj_dirs);
+            let res = create_if_not_exists(&proj_dirs);
             assert!(res.is_ok());
         }
         Ok(proj_dirs.to_path_buf())

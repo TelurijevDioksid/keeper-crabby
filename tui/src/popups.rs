@@ -6,6 +6,7 @@ use ratatui::{crossterm::event::KeyEvent, layout::Rect, Frame};
 use crate::Application;
 
 pub mod exit_popup;
+pub mod insert_master_popup;
 pub mod insert_pwd_popup;
 pub mod message_popup;
 
@@ -13,6 +14,7 @@ pub enum PopupType {
     Exit,
     InsertPwd,
     Message,
+    InsertMaster,
 }
 
 pub trait Popup: DynClone + Downcast {

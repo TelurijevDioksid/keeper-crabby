@@ -11,10 +11,10 @@ pub use super::models::RecordOperationConfig;
 
 #[derive(Debug, Clone, PartialEq)]
 struct CipherConfig {
-    pub key: Key<Aes128GcmSiv>,
-    pub salt: Vec<u8>,                // 22 bytes
-    pub nonce: GenericArray<u8, U12>, // 12 bytes
-    pub ciphertext: Vec<u8>,
+    key: Key<Aes128GcmSiv>,
+    salt: Vec<u8>,                // 22 bytes
+    nonce: GenericArray<u8, U12>, // 12 bytes
+    ciphertext: Vec<u8>,
 }
 
 impl CipherConfig {
@@ -190,7 +190,10 @@ impl Record {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct User(Vec<Record>, PathBuf);
+struct Username(String);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct User(Vec<Record>, PathBuf, Username);
 
 impl User {
     pub fn from(path: &PathBuf, username: &str, master_pwd: &str) -> Result<Self, String> {
@@ -218,7 +221,7 @@ impl User {
 
         let path = path.join(hash(username.to_string()));
 
-        Ok(User(new_records, path))
+        Ok(User(new_records, path, Username(username.to_string())))
     }
 
     pub fn new(user: &RecordOperationConfig) -> Result<(), String> {
@@ -245,6 +248,10 @@ impl User {
 
     pub fn records(&self) -> Vec<Record> {
         self.0.clone()
+    }
+
+    pub fn username(&self) -> String {
+        self.2.clone().0
     }
 
     pub fn add_record(&mut self, record: RecordOperationConfig) -> Result<(), String> {
@@ -429,7 +436,6 @@ impl User {
 mod tests {
     use super::*;
 
-    use dotenv::dotenv;
     use rand::Rng;
     use std::{env, fs};
 
@@ -439,16 +445,15 @@ mod tests {
     }
 
     fn generate_random_username() -> String {
-        format!("keeper-crabby-{}", random_number())
+        format!("krab-{}", random_number())
     }
 
     fn setup_user_data(domain: &str) -> Result<RecordOperationConfig, String> {
-        dotenv().ok();
         let username = generate_random_username();
         let username = username.as_str().to_owned();
         let master_pwd = "password";
         let pwd = "password";
-        let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
+        let path = PathBuf::from(env::var("KRAB_TEMP_DIR").unwrap());
         let user = RecordOperationConfig::new(username.as_str(), master_pwd, domain, pwd, &path);
         match User::new(&user) {
             Ok(_) => Ok(user.clone()),
@@ -462,7 +467,7 @@ mod tests {
 
     #[test]
     fn test_derive_key() {
-        let data = "kepper-crabby";
+        let data = "krab";
         let derived_key = DerivedKey::derive_key(data, None);
         let key = derived_key.key;
         let salt = derived_key.salt;
@@ -472,7 +477,7 @@ mod tests {
 
     #[test]
     fn test_cipher_config() {
-        let data = "keeper-crabby";
+        let data = "krab";
         let master_pwd = "password";
         let cipher = CipherConfig::encrypt_data(data, master_pwd).unwrap();
         let decrypted = cipher.decrypt_data().unwrap();
@@ -499,13 +504,12 @@ mod tests {
         // a user with the same username twice (setup_user_data creates a new user each time
         // with a unique username)
 
-        dotenv().ok();
         let username = generate_random_username();
         let username = username.as_str();
         let master_pwd = "password";
         let domain = "example.com";
         let pwd = "password";
-        let path = PathBuf::from(env::var("KEEPER_CRABBY_TEMP_DIR").unwrap());
+        let path = PathBuf::from(env::var("KRAB_TEMP_DIR").unwrap());
         let config = RecordOperationConfig::new(username, master_pwd, domain, pwd, &path);
         let _ = User::new(&config);
 
@@ -522,7 +526,6 @@ mod tests {
 
     #[test]
     fn test_integrity_success() {
-        dotenv().ok();
         let user_data = setup_user_data("example.com").unwrap();
         let user = create_user(&user_data).unwrap();
 

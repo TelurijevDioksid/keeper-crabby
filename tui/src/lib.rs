@@ -82,6 +82,15 @@ fn run_app<B: Backend>(
                             ScreenState::Register(s) => {
                                 new_app = s.handle_insert_record_popup(new_app, last_state);
                             }
+                            ScreenState::Home(s) => {
+                                new_app = s.handle_insert_record_popup(new_app, last_state);
+                            }
+                            _ => {}
+                        },
+                        PopupType::InsertMaster => match &mut app.state {
+                            ScreenState::Home(s) => {
+                                new_app = s.handle_insert_master_popup(new_app, last_state);
+                            }
                             _ => {}
                         },
                         _ => {}
@@ -177,7 +186,7 @@ struct MutableAppState {
 impl Application {
     fn create(db_path: PathBuf, rect: Rect) -> RefCell<Self> {
         let immutable_app_state = ImmutableAppState {
-            name: "Keeper Crabby".to_string(),
+            name: "krab".to_string(),
             db_path,
             rect: Some(rect),
         };
