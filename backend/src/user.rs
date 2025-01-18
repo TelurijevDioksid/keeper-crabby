@@ -17,6 +17,27 @@ struct CipherConfig {
     ciphertext: Vec<u8>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct DerivedKey {
+    pub key: [u8; 16],
+    pub salt: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct Record {
+    cypher: CipherConfig,
+    offset: u32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+struct Username(String);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct User(Vec<Record>, PathBuf, Username);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReadOnlyRecords(Vec<(String, String)>);
+
 impl CipherConfig {
     fn new(
         key: Key<Aes128GcmSiv>,
@@ -67,12 +88,6 @@ impl CipherConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-struct DerivedKey {
-    pub key: [u8; 16],
-    pub salt: Vec<u8>,
-}
-
 impl DerivedKey {
     fn new(key: [u8; 16], salt: Vec<u8>) -> Self {
         DerivedKey { key, salt }
@@ -99,35 +114,9 @@ impl DerivedKey {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Record {
-    cypher: CipherConfig,
-    offset: u32,
-    domain: Option<String>,
-    pwd: Option<String>,
-}
-
 impl Record {
-    fn new(cypher: CipherConfig, offset: u32, domain: Option<String>, pwd: Option<String>) -> Self {
-        Record {
-            cypher,
-            offset,
-            domain,
-            pwd,
-        }
-    }
-
-    fn set_domain(&mut self, domain: String) {
-        self.domain = Some(domain);
-    }
-
-    fn set_pwd(&mut self, pwd: String) {
-        self.pwd = Some(pwd);
-    }
-
-    pub fn secret(&self) -> (String, String) {
-        assert!(self.domain.is_some() && self.pwd.is_some());
-        (self.domain.clone().unwrap(), self.pwd.clone().unwrap())
+    fn new(cypher: CipherConfig, offset: u32) -> Self {
+        Record { cypher, offset }
     }
 
     fn read_from_bytes(
@@ -144,7 +133,7 @@ impl Record {
         let cipher_config = CipherConfig::new(key, salt, nonce, ciphertext);
         let current_offset = 38 + ciphertext_len as usize + offset as usize;
         Ok((
-            Record::new(cipher_config, offset, None, None),
+            Record::new(cipher_config, offset),
             bytes[(38 + ciphertext_len as usize)..].to_vec(),
             current_offset as u32,
         ))
@@ -187,18 +176,21 @@ impl Record {
         }
         Ok(data)
     }
+
+    fn data(&self) -> Result<String, aead::Error> {
+        self.cypher.decrypt_data()
+    }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-struct Username(String);
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct User(Vec<Record>, PathBuf, Username);
-
 impl User {
-    pub fn from(path: &PathBuf, username: &str, master_pwd: &str) -> Result<Self, String> {
+    pub fn from(
+        path: &PathBuf,
+        username: &str,
+        master_pwd: &str,
+    ) -> Result<(Self, ReadOnlyRecords), String> {
         let records = Record::read_user(path, username, master_pwd);
         let mut new_records = vec![];
+        let mut read_only_records = vec![];
 
         match records {
             Ok(r) => {
@@ -207,9 +199,8 @@ impl User {
                     match decrypted {
                         Ok(decrypted) => {
                             let parts: Vec<&str> = decrypted.split_whitespace().collect();
-                            let mut new_record = record.clone();
-                            new_record.set_domain(parts[0].to_string());
-                            new_record.set_pwd(parts[1].to_string());
+                            let new_record = record.clone();
+                            read_only_records.push((parts[0].to_string(), parts[1].to_string()));
                             new_records.push(new_record);
                         }
                         Err(_) => return Err("Could not decrypt data".to_string()),
@@ -221,7 +212,10 @@ impl User {
 
         let path = path.join(hash(username.to_string()));
 
-        Ok(User(new_records, path, Username(username.to_string())))
+        Ok((
+            User(new_records, path, Username(username.to_string())),
+            ReadOnlyRecords(read_only_records),
+        ))
     }
 
     pub fn new(user: &RecordOperationConfig) -> Result<(), String> {
@@ -246,63 +240,76 @@ impl User {
         }
     }
 
-    pub fn records(&self) -> Vec<Record> {
-        self.0.clone()
-    }
-
     pub fn username(&self) -> String {
         self.2.clone().0
     }
 
-    pub fn add_record(&mut self, record: RecordOperationConfig) -> Result<(), String> {
-        let integrity = self.check_integrity(&record.username, &record.master_pwd, &record.path);
+    pub fn add_record(&mut self, record: RecordOperationConfig) -> Result<ReadOnlyRecords, String> {
+        let (integrity, ro_records) =
+            self.check_integrity(&record.username, &record.master_pwd, &record.path);
+
+        let mut ro_records = match ro_records {
+            Some(ro_records) => ro_records,
+            None => return Err("Could not read user".to_string()),
+        };
 
         if !integrity {
             return Err("Integrity check failed".to_string());
         }
 
+        ro_records.add_record(&record.domain, &record.pwd);
         let data = format!("{} {}", record.domain, record.pwd);
         let cipher = CipherConfig::encrypt_data(&data, &record.master_pwd);
         let cipher = match cipher {
             Ok(cipher) => cipher,
             Err(_) => return Err("Could not create user.".to_string()),
         };
+
         let offset = self.last_offset();
-        let record = Record::new(
-            cipher,
-            offset,
-            Some(record.domain.to_string()),
-            Some(record.pwd.to_string()),
-        );
+        let record = Record::new(cipher, offset);
         let mut buffer = vec![];
         record.cypher.write(&mut buffer);
         append_to_file(&self.path(), buffer).unwrap();
         self.0.push(record);
 
-        Ok(())
+        Ok(ro_records)
     }
 
-    pub fn remove_record(&mut self, record: RecordOperationConfig) -> Result<(), String> {
-        let integrity = self.check_integrity(&record.username, &record.master_pwd, &record.path);
+    pub fn remove_record(
+        &mut self,
+        record: RecordOperationConfig,
+    ) -> Result<ReadOnlyRecords, String> {
+        let (integrity, ro_records) =
+            self.check_integrity(&record.username, &record.master_pwd, &record.path);
+
+        let mut ro_records = match ro_records {
+            Some(ro_records) => ro_records,
+            None => return Err("Could not read user".to_string()),
+        };
 
         if !integrity {
             return Err("Integrity check failed".to_string());
         }
 
-        if self
-            .domains()
-            .iter()
-            .find(|d| d.as_str() == record.domain)
-            .is_none()
-        {
-            return Err("Record not found".to_string());
+        let mut new_records = vec![];
+        let mut found = false;
+        for r in self.0.iter() {
+            let data = match r.data() {
+                Ok(data) => data,
+                Err(_) => return Err("Could not read data".to_string()),
+            };
+
+            let parts: Vec<&str> = data.split_whitespace().collect();
+            if parts[0] != record.domain {
+                new_records.push(r.clone());
+                ro_records.remove_record(&record.domain);
+            } else {
+                found = true;
+            }
         }
 
-        let mut new_records = vec![];
-        for r in self.0.iter() {
-            if r.domain != Some(record.domain.to_string()) {
-                new_records.push(r.clone());
-            }
+        if !found {
+            return Err("Record not found".to_string());
         }
 
         // TODO: calibrate offsets or remove them
@@ -318,11 +325,20 @@ impl User {
         write_to_file(&path, buffer).unwrap();
         self.0 = new_records;
 
-        Ok(())
+        Ok(ro_records)
     }
 
-    pub fn modify_record(&mut self, record: RecordOperationConfig) -> Result<(), String> {
-        let integrity = self.check_integrity(&record.username, &record.master_pwd, &record.path);
+    pub fn modify_record(
+        &mut self,
+        record: RecordOperationConfig,
+    ) -> Result<ReadOnlyRecords, String> {
+        let (integrity, ro_records) =
+            self.check_integrity(&record.username, &record.master_pwd, &record.path);
+
+        let mut ro_records = match ro_records {
+            Some(ro_records) => ro_records,
+            None => return Err("Could not read user".to_string()),
+        };
 
         if !integrity {
             return Err("Integrity check failed".to_string());
@@ -331,8 +347,15 @@ impl User {
         let mut new_records = vec![];
         let mut found = false;
         for r in self.0.iter() {
-            if r.domain != Some(record.domain.to_string()) {
+            let data = match r.data() {
+                Ok(data) => data,
+                Err(_) => return Err("Could not read data".to_string()),
+            };
+
+            let parts: Vec<&str> = data.split_whitespace().collect();
+            if parts[0] != record.domain {
                 new_records.push(r.clone());
+                ro_records.remove_record(&record.domain);
             } else {
                 found = true;
             }
@@ -342,6 +365,8 @@ impl User {
             return Err("Record not found".to_string());
         }
 
+        ro_records.add_record(&record.domain, &record.pwd);
+
         let data = format!("{} {}", record.domain, record.pwd);
         let cipher = CipherConfig::encrypt_data(&data, &record.master_pwd);
         let cipher = match cipher {
@@ -349,12 +374,7 @@ impl User {
             Err(_) => return Err("Could not create user.".to_string()),
         };
 
-        let record = Record::new(
-            cipher,
-            self.last_offset(),
-            Some(record.domain.to_string()),
-            Some(record.pwd.to_string()),
-        );
+        let record = Record::new(cipher, self.last_offset());
 
         new_records.push(record);
 
@@ -366,7 +386,7 @@ impl User {
         write_to_file(&self.path(), buffer).unwrap();
         self.0 = new_records;
 
-        Ok(())
+        Ok(ro_records)
     }
 
     fn path(&self) -> PathBuf {
@@ -384,43 +404,31 @@ impl User {
         offset
     }
 
-    fn first_record(&self) -> Record {
-        for record in self.0.iter() {
-            if record.offset == 0 {
-                return record.clone();
-            }
-        }
-
-        panic!("No first record found");
-    }
-
-    fn domains(&self) -> Vec<String> {
-        let mut domains = vec![];
-        for record in self.0.iter() {
-            if record.domain.is_some() {
-                domains.push(record.domain.clone().unwrap());
-            }
-        }
-
-        domains
-    }
-
-    fn check_integrity(&self, username: &str, master_pwd: &str, path: &PathBuf) -> bool {
+    fn check_integrity(
+        &self,
+        username: &str,
+        master_pwd: &str,
+        path: &PathBuf,
+    ) -> (bool, Option<ReadOnlyRecords>) {
         let records = Record::read_user(path, username, master_pwd);
 
         match records {
             Ok(r) => {
-                let first_record = r[0].clone();
-
-                match first_record.cypher.decrypt_data() {
-                    Ok(_) => {}
-                    Err(_) => return false,
+                let mut read_only_records = vec![];
+                for record in r.iter() {
+                    let decrypted = record.cypher.decrypt_data();
+                    match decrypted {
+                        Ok(decrypted) => {
+                            let parts: Vec<&str> = decrypted.split_whitespace().collect();
+                            read_only_records.push((parts[0].to_string(), parts[1].to_string()));
+                        }
+                        Err(_) => return (false, None),
+                    }
                 }
+                (true, Some(ReadOnlyRecords(read_only_records)))
             }
-            Err(_) => return false,
+            Err(_) => (false, None),
         }
-
-        true
     }
 
     fn remove_records_from_file(&mut self) {
@@ -429,6 +437,27 @@ impl User {
             Ok(_) => {}
             Err(_) => panic!("Could not clear file content"),
         }
+    }
+}
+
+impl ReadOnlyRecords {
+    pub fn records(&self) -> Vec<(String, String)> {
+        self.0.clone()
+    }
+
+    fn add_record(&mut self, domain: &String, pwd: &String) {
+        self.0.push((domain.clone(), pwd.clone()));
+    }
+
+    fn remove_record(&mut self, domain: &String) {
+        let mut new_records = vec![];
+        for record in self.0.iter() {
+            if record.0 != *domain {
+                new_records.push(record.clone());
+            }
+        }
+
+        self.0 = new_records;
     }
 }
 
@@ -461,7 +490,7 @@ mod tests {
         }
     }
 
-    fn create_user(config: &RecordOperationConfig) -> Result<User, String> {
+    fn create_user(config: &RecordOperationConfig) -> Result<(User, ReadOnlyRecords), String> {
         User::from(&config.path, &config.username, &config.master_pwd)
     }
 
@@ -527,9 +556,9 @@ mod tests {
     #[test]
     fn test_integrity_success() {
         let user_data = setup_user_data("example.com").unwrap();
-        let user = create_user(&user_data).unwrap();
+        let (user, _) = create_user(&user_data).unwrap();
 
-        let integrity =
+        let (integrity, _) =
             user.check_integrity(&user_data.username, &user_data.master_pwd, &user_data.path);
 
         // delete the file (user)
@@ -541,9 +570,10 @@ mod tests {
     #[test]
     fn test_integrity_fail() {
         let user_data = setup_user_data("example.com").unwrap();
-        let user = create_user(&user_data).unwrap();
+        let (user, _) = create_user(&user_data).unwrap();
 
-        let integrity = user.check_integrity(&user_data.username, "wrong_pwd", &user_data.path);
+        let (integrity, _) =
+            user.check_integrity(&user_data.username, "wrong_pwd", &user_data.path);
 
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
@@ -554,11 +584,10 @@ mod tests {
     #[test]
     fn test_read_record_success() {
         let user_data = setup_user_data("example.com").unwrap();
-        let user = create_user(&user_data).unwrap();
+        let (user, records) = create_user(&user_data).unwrap();
 
-        let records = user.records();
-        let first_record = user.first_record();
-        let (domain, pwd) = first_record.secret();
+        let records = records.records();
+        let (domain, pwd) = records.first().unwrap();
 
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
@@ -586,7 +615,7 @@ mod tests {
     #[test]
     fn test_add_record_success() {
         let user_data = setup_user_data("example.com").unwrap();
-        let mut user = create_user(&user_data).unwrap();
+        let (mut user, _) = create_user(&user_data).unwrap();
 
         let new_domain = "example2.com";
         let new_pwd = "password2";
@@ -599,12 +628,12 @@ mod tests {
         );
         let res = user.add_record(add_record);
 
-        let user = User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
+        let (user, records) =
+            User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
 
-        let records = user.records();
-        let inserted_record = records
-            .iter()
-            .find(|r| r.domain == Some(new_domain.to_string()));
+        let records = records.records();
+
+        let inserted_record = records.iter().find(|r| r.0 == new_domain);
 
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
@@ -612,14 +641,20 @@ mod tests {
         assert_eq!(res.is_ok(), true);
         assert_eq!(inserted_record.is_some(), true);
         assert_eq!(records.len(), 2);
-        assert_eq!(records[1].domain, Some(new_domain.to_string()));
-        assert_eq!(records[1].pwd, Some(new_pwd.to_string()));
+        assert_eq!(
+            records.iter().find(|r| r.0 == "example.com").is_some(),
+            true
+        );
+        assert_eq!(
+            records.iter().find(|r| r.0 == "example2.com").is_some(),
+            true
+        );
     }
 
     #[test]
     fn test_add_record_fail() {
         let user_data = setup_user_data("example.com").unwrap();
-        let mut user = create_user(&user_data).unwrap();
+        let (mut user, records) = create_user(&user_data).unwrap();
 
         let new_domain = "example2.com";
         let new_pwd = "password2";
@@ -635,14 +670,14 @@ mod tests {
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
 
-        assert_eq!(user.records().len(), 1);
+        assert_eq!(records.records().len(), 1);
         assert_eq!(res.is_err(), true);
     }
 
     #[test]
     fn test_add_record_fail_already_exists() {
         let user_data = setup_user_data("example.com").unwrap();
-        let mut user = create_user(&user_data).unwrap();
+        let (mut user, records) = create_user(&user_data).unwrap();
 
         let new_domain = "example.com";
         let new_pwd = "password2";
@@ -658,14 +693,14 @@ mod tests {
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
 
-        assert_eq!(user.records().len(), 1);
+        assert_eq!(records.records().len(), 1);
         assert_eq!(res.is_err(), true);
     }
 
     #[test]
     fn test_remove_record_success() {
         let user_data = setup_user_data("example.com").unwrap();
-        let mut user = create_user(&user_data).unwrap();
+        let (mut user, records) = create_user(&user_data).unwrap();
 
         let new_domain = "example2.com";
         let new_pwd = "password2";
@@ -698,13 +733,11 @@ mod tests {
         );
         let res = user.remove_record(remove_record);
 
-        let user = User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
+        let (user, records) =
+            User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
 
-        let records = user.records();
-        let domains = user.domains();
-
-        let file_length = fs::read(user.path()).unwrap().len();
-        let records_len = records.iter().fold(0, |acc, r| acc + r.cypher.len());
+        let records = records.records();
+        let domains: Vec<String> = records.iter().map(|r| r.0.clone()).collect();
 
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
@@ -732,13 +765,12 @@ mod tests {
                 .is_some(),
             true
         );
-        assert_eq!(file_length, records_len);
     }
 
     #[test]
     fn test_remove_record_read_user_success() {
         let user_data = setup_user_data("example.com").unwrap();
-        let mut user = create_user(&user_data).unwrap();
+        let (mut user, records) = create_user(&user_data).unwrap();
 
         let new_domain = "example2.com";
         let new_pwd = "password2";
@@ -771,8 +803,9 @@ mod tests {
         );
         let res = user.remove_record(remove_record);
 
-        let user = User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
-        let records = user.records();
+        let (user, records) =
+            User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
+        let records = records.records();
 
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
@@ -784,7 +817,7 @@ mod tests {
     #[test]
     fn test_remove_record_fail_not_found() {
         let user_data = setup_user_data("example.com").unwrap();
-        let mut user = create_user(&user_data).unwrap();
+        let (mut user, _) = create_user(&user_data).unwrap();
 
         let new_domain = "example2.com";
         let new_pwd = "password2";
@@ -815,7 +848,7 @@ mod tests {
     #[test]
     fn test_remove_record_fail_integrity_check() {
         let user_data = setup_user_data("example.com").unwrap();
-        let mut user = create_user(&user_data).unwrap();
+        let (mut user, _) = create_user(&user_data).unwrap();
 
         let new_domain = "example2.com";
         let new_pwd = "password2";
@@ -846,7 +879,7 @@ mod tests {
     #[test]
     pub fn test_modify_record_success() {
         let user_data = setup_user_data("example.com").unwrap();
-        let mut user = create_user(&user_data).unwrap();
+        let (mut user, _) = create_user(&user_data).unwrap();
 
         let new_pwd = "password2";
         let modify_record = RecordOperationConfig::new(
@@ -858,25 +891,28 @@ mod tests {
         );
         let res = user.modify_record(modify_record);
 
-        let user = User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
-        let records = user.records();
-        let modified_record = records
-            .iter()
-            .find(|r| r.domain == Some(user_data.domain.to_string()));
+        let (user, records) =
+            User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
+        let records = records.records();
+        let modified_record = records.iter().find(|r| r.0 == user_data.domain);
+        let modified_record = match modified_record {
+            Some(record) => Some(record.1.clone()),
+            None => None,
+        };
 
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
 
         assert_eq!(res.is_ok(), true);
         assert_eq!(modified_record.is_some(), true);
-        assert_eq!(modified_record.unwrap().pwd, Some(new_pwd.to_string()));
+        assert_eq!(modified_record.unwrap(), new_pwd);
         assert_eq!(records.len(), 1);
     }
 
     #[test]
     pub fn test_modify_integrity_fail() {
         let user_data = setup_user_data("example.com").unwrap();
-        let mut user = create_user(&user_data).unwrap();
+        let (mut user, _) = create_user(&user_data).unwrap();
 
         let new_pwd = "password2";
         let modify_record = RecordOperationConfig::new(
@@ -897,7 +933,7 @@ mod tests {
     #[test]
     pub fn test_modify_record_fail_not_found() {
         let user_data = setup_user_data("example.com").unwrap();
-        let mut user = create_user(&user_data).unwrap();
+        let (mut user, _) = create_user(&user_data).unwrap();
 
         let new_pwd = "password2";
         let modify_record = RecordOperationConfig::new(

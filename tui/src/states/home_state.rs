@@ -7,7 +7,7 @@ use ratatui::{
     Frame,
 };
 
-use krab_backend::user::{RecordOperationConfig, User};
+use krab_backend::user::{ReadOnlyRecords, RecordOperationConfig, User};
 
 use crate::{
     components::scrollable_view::ScrollView,
@@ -78,9 +78,13 @@ pub struct Home {
 }
 
 impl Home {
-    pub fn new(user: User, position: Position, area: Rect) -> Self {
+    pub fn new(user: User, records: ReadOnlyRecords, position: Position, area: Rect) -> Self {
         let secrets = Secrets {
-            secrets: user.records().iter().map(|x| x.secret()).collect(),
+            secrets: records
+                .records()
+                .iter()
+                .map(|x| (x.0.clone(), x.1.clone()))
+                .collect(),
             selected_secret: 0,
             shown_secrets: vec![],
         };
@@ -430,7 +434,12 @@ impl State for Home {
                 }
 
                 self.secrets = Secrets {
-                    secrets: self.user.records().iter().map(|x| x.secret()).collect(),
+                    secrets: res
+                        .unwrap()
+                        .records()
+                        .iter()
+                        .map(|x| (x.0.clone(), x.1.clone()))
+                        .collect(),
                     selected_secret: self.secrets.selected_secret,
                     shown_secrets: self.secrets.shown_secrets.clone(),
                 };
@@ -467,7 +476,12 @@ impl State for Home {
                 }
 
                 self.secrets = Secrets {
-                    secrets: self.user.records().iter().map(|x| x.secret()).collect(),
+                    secrets: res
+                        .unwrap()
+                        .records()
+                        .iter()
+                        .map(|x| (x.0.clone(), x.1.clone()))
+                        .collect(),
                     selected_secret: self.secrets.selected_secret,
                     shown_secrets: self.secrets.shown_secrets.clone(),
                 };

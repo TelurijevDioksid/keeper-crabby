@@ -10,7 +10,10 @@ use ratatui::{
     Frame,
 };
 
-use krab_backend::{check_user, user::User};
+use krab_backend::{
+    check_user,
+    user::{ReadOnlyRecords, User},
+};
 
 use crate::{
     centered_rect,
@@ -69,15 +72,15 @@ impl Login {
     // this needs to be reworked
     // this function should return a vector of cipher configs and a master pwd
     // or does it?
-    pub fn login(&self) -> Result<User, String> {
+    pub fn login(&self) -> Result<(User, ReadOnlyRecords), String> {
         let user_exists = check_user(&self.username, self.path.clone());
         if !user_exists {
             return Err("Cannot login".to_string());
         }
 
-        let user = User::from(&self.path, &self.username, &self.master_password);
+        let user_creation_result = User::from(&self.path, &self.username, &self.master_password);
 
-        match user {
+        match user_creation_result {
             Ok(u) => Ok(u),
             Err(_) => Err("Cannot login".to_string()),
         }
@@ -196,7 +199,8 @@ impl State for Login {
                     match data {
                         Ok(d) => {
                             app.state = ScreenState::Home(Home::new(
-                                d,
+                                d.0,
+                                d.1,
                                 Position::default(),
                                 app.immutable_app_state.rect.unwrap(),
                             ));
