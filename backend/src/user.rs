@@ -595,6 +595,19 @@ mod tests {
         assert_eq!(records.len(), 1);
         assert_eq!(domain, "example.com");
         assert_eq!(pwd, "password");
+
+        let user_data = setup_user_data("example2. com").unwrap();
+        let (user, records) = create_user(&user_data).unwrap();
+
+        let records = records.records();
+        let (domain, pwd) = records.first().unwrap();
+
+        // delete the file (user)
+        fs::remove_file(user.path()).unwrap();
+
+        assert_eq!(records.len(), 1);
+        assert_eq!(domain, "example2. com");
+        assert_eq!(pwd, "password");
     }
 
     #[test]
