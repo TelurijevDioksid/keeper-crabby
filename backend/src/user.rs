@@ -3,11 +3,17 @@ use aes_gcm_siv::{
     AeadCore, Aes128GcmSiv, Key,
 };
 use scrypt::{password_hash::SaltString, scrypt, Params};
-use std::{fs, mem::size_of, path::PathBuf, str};
+use std::{fs, path::PathBuf, str};
 
 use crate::{append_to_file, clear_file_content, create_file, hash, write_to_file};
 
 pub use super::models::RecordOperationConfig;
+
+#[derive(Debug, Clone, PartialEq)]
+struct DomainPasswordPair {
+    domain: String,
+    password: String,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 struct CipherConfig {
@@ -53,6 +59,19 @@ impl CipherConfig {
         }
     }
 
+    fn marshal(domain: &str, pwd: &str) -> String {
+        let marshal_domain = domain.to_string().replace("\\", "\\\\").replace(" ", "\\s");
+        let marshal_pwd = pwd.to_string().replace("\\", "\\\\").replace(" ", "\\s");
+        format!("{} {}", marshal_domain, marshal_pwd)
+    }
+
+    fn unmarshal(data: &str) -> (String, String) {
+        let parts: Vec<&str> = data.split_whitespace().collect();
+        let domain = parts[0].replace("\\s", " ").replace("\\\\", "\\");
+        let pwd = parts[1].replace("\\s", " ").replace("\\\\", "\\");
+        (domain, pwd)
+    }
+
     fn write(&self, buffer: &mut Vec<u8>) {
         // this is needed to get the length of the ciphertext
         // so that we can read it back from the file
@@ -66,21 +85,26 @@ impl CipherConfig {
         buffer.append(&mut data);
     }
 
-    fn encrypt_data(data: &str, master_pwd: &str) -> Result<Self, aead::Error> {
+    fn encrypt_data(domain: &str, password: &str, master_pwd: &str) -> Result<Self, aead::Error> {
         let derived_key = DerivedKey::derive_key(master_pwd, None);
         let salt = derived_key.salt;
         let key = Key::<Aes128GcmSiv>::clone_from_slice(&derived_key.key);
         let cipher = Aes128GcmSiv::new(&key);
         let nonce = Aes128GcmSiv::generate_nonce(&mut OsRng);
+        let data = CipherConfig::marshal(domain, password);
+
         let ciphertext = cipher.encrypt(&nonce, data.as_bytes())?;
         Ok(CipherConfig::new(key, salt, nonce, ciphertext))
     }
 
-    fn decrypt_data(&self) -> Result<String, aead::Error> {
+    fn decrypt_data(&self) -> Result<DomainPasswordPair, aead::Error> {
         let cipher = Aes128GcmSiv::new(&self.key);
         let plaintext = cipher.decrypt(&self.nonce, self.ciphertext.as_ref())?;
-        let result = String::from_utf8(plaintext).unwrap();
-        Ok(result)
+        let (domain, pwd) = CipherConfig::unmarshal(str::from_utf8(&plaintext).unwrap());
+        Ok(DomainPasswordPair {
+            domain,
+            password: pwd,
+        })
     }
 }
 
@@ -173,7 +197,7 @@ impl Record {
         Ok(data)
     }
 
-    fn data(&self) -> Result<String, aead::Error> {
+    fn data(&self) -> Result<DomainPasswordPair, aead::Error> {
         self.cypher.decrypt_data()
     }
 }
@@ -185,31 +209,27 @@ impl User {
         master_pwd: &str,
     ) -> Result<(Self, ReadOnlyRecords), String> {
         let records = Record::read_user(path, username, master_pwd);
-        let mut new_records = vec![];
+        let records = match records {
+            Ok(r) => r,
+            Err(e) => return Err(e),
+        };
         let mut read_only_records = vec![];
 
-        match records {
-            Ok(r) => {
-                for record in r.iter() {
-                    let decrypted = record.cypher.decrypt_data();
-                    match decrypted {
-                        Ok(decrypted) => {
-                            let parts: Vec<&str> = decrypted.split_whitespace().collect();
-                            let new_record = record.clone();
-                            read_only_records.push((parts[0].to_string(), parts[1].to_string()));
-                            new_records.push(new_record);
-                        }
-                        Err(_) => return Err("Could not decrypt data".to_string()),
-                    }
+        for record in records.iter() {
+            let decrypted = record.cypher.decrypt_data();
+            match decrypted {
+                Ok(decrypted) => {
+                    read_only_records
+                        .push((decrypted.domain.to_string(), decrypted.password.to_string()));
                 }
+                Err(_) => return Err("Could not decrypt data".to_string()),
             }
-            Err(e) => return Err(e),
         }
 
         let path = path.join(hash(username.to_string()));
 
         Ok((
-            User(new_records, path, Username(username.to_string())),
+            User(records, path, Username(username.to_string())),
             ReadOnlyRecords(read_only_records),
         ))
     }
@@ -221,9 +241,8 @@ impl User {
             Ok(path) => path,
             Err(_) => return Err("Could not create file.".to_string()),
         };
-        let data = format!("{} {}", user.domain, user.pwd);
 
-        let cipher = CipherConfig::encrypt_data(&data, &user.master_pwd);
+        let cipher = CipherConfig::encrypt_data(&user.domain, &user.pwd, &user.master_pwd);
         let cipher = match cipher {
             Ok(cipher) => cipher,
             Err(_) => return Err("Could not encrypt data.".to_string()),
@@ -253,9 +272,12 @@ impl User {
             return Err("Integrity check failed".to_string());
         }
 
+        if ro_records.0.iter().find(|r| r.0 == record.domain).is_some() {
+            return Err("Record already exists".to_string());
+        }
+
         ro_records.add_record(&record.domain, &record.pwd);
-        let data = format!("{} {}", record.domain, record.pwd);
-        let cipher = CipherConfig::encrypt_data(&data, &record.master_pwd);
+        let cipher = CipherConfig::encrypt_data(&record.domain, &record.pwd, &record.master_pwd);
         let cipher = match cipher {
             Ok(cipher) => cipher,
             Err(_) => return Err("Could not create user.".to_string()),
@@ -295,8 +317,7 @@ impl User {
                 Err(_) => return Err("Could not read data".to_string()),
             };
 
-            let parts: Vec<&str> = data.split_whitespace().collect();
-            if parts[0] != record.domain {
+            if data.domain != record.domain {
                 new_records.push(r.clone());
                 ro_records.remove_record(&record.domain);
             } else {
@@ -348,8 +369,7 @@ impl User {
                 Err(_) => return Err("Could not read data".to_string()),
             };
 
-            let parts: Vec<&str> = data.split_whitespace().collect();
-            if parts[0] != record.domain {
+            if data.domain != record.domain {
                 new_records.push(r.clone());
                 ro_records.remove_record(&record.domain);
             } else {
@@ -363,8 +383,7 @@ impl User {
 
         ro_records.add_record(&record.domain, &record.pwd);
 
-        let data = format!("{} {}", record.domain, record.pwd);
-        let cipher = CipherConfig::encrypt_data(&data, &record.master_pwd);
+        let cipher = CipherConfig::encrypt_data(&record.domain, &record.pwd, &record.master_pwd);
         let cipher = match cipher {
             Ok(cipher) => cipher,
             Err(_) => return Err("Could not create user.".to_string()),
@@ -415,8 +434,10 @@ impl User {
                     let decrypted = record.cypher.decrypt_data();
                     match decrypted {
                         Ok(decrypted) => {
-                            let parts: Vec<&str> = decrypted.split_whitespace().collect();
-                            read_only_records.push((parts[0].to_string(), parts[1].to_string()));
+                            read_only_records.push((
+                                decrypted.domain.to_string(),
+                                decrypted.password.to_string(),
+                            ));
                         }
                         Err(_) => return (false, None),
                     }
@@ -501,12 +522,54 @@ mod tests {
     }
 
     #[test]
+    fn test_marshalling() {
+        let domain = "example.com";
+        let pwd = "password";
+        let data = CipherConfig::marshal(domain, pwd);
+        let (d, p) = CipherConfig::unmarshal(data.as_str());
+        assert_eq!(d, domain);
+        assert_eq!(p, pwd);
+
+        let domain = "example.com with spaces";
+        let pwd = "password with spaces";
+        let data = CipherConfig::marshal(domain, pwd);
+        let (d, p) = CipherConfig::unmarshal(data.as_str());
+        assert_eq!(d, domain);
+        assert_eq!(p, pwd);
+
+        let domain = "example.com with \\";
+        let pwd = "password with \\";
+        let data = CipherConfig::marshal(domain, pwd);
+        let (d, p) = CipherConfig::unmarshal(data.as_str());
+        assert_eq!(d, domain);
+        assert_eq!(p, pwd);
+
+        let domain = "example.com with \\ and    spacessss";
+        let pwd = "password with \\ and    spacessss";
+        let data = CipherConfig::marshal(domain, pwd);
+        let (d, p) = CipherConfig::unmarshal(data.as_str());
+        assert_eq!(d, domain);
+        assert_eq!(p, pwd);
+    }
+
+    #[test]
     fn test_cipher_config() {
-        let data = "krab";
+        let domain = "example.com";
+        let pwd = "password";
+        let data = CipherConfig::marshal(domain, pwd);
         let master_pwd = "password";
-        let cipher = CipherConfig::encrypt_data(data, master_pwd).unwrap();
+        let cipher = CipherConfig::encrypt_data(domain, pwd, master_pwd).unwrap();
         let decrypted = cipher.decrypt_data().unwrap();
+        let decrypted = format!("{} {}", decrypted.domain, decrypted.password);
         assert_eq!(decrypted, data);
+
+        let domain = "example.com with  spaces and \\";
+        let pwd = "password with  spaces and \\";
+        let data = CipherConfig::marshal(domain, pwd);
+        let marshalled =
+            "example.com\\swith\\s\\sspaces\\sand\\s\\\\ password\\swith\\s\\sspaces\\sand\\s\\\\"
+                .to_string();
+        assert_eq!(data, marshalled);
     }
 
     #[test]
@@ -709,7 +772,7 @@ mod tests {
     #[test]
     fn test_remove_record_success() {
         let user_data = setup_user_data("example.com").unwrap();
-        let (mut user, records) = create_user(&user_data).unwrap();
+        let (mut user, _) = create_user(&user_data).unwrap();
 
         let new_domain = "example2.com";
         let new_pwd = "password2";
@@ -779,7 +842,7 @@ mod tests {
     #[test]
     fn test_remove_record_read_user_success() {
         let user_data = setup_user_data("example.com").unwrap();
-        let (mut user, records) = create_user(&user_data).unwrap();
+        let (mut user, _) = create_user(&user_data).unwrap();
 
         let new_domain = "example2.com";
         let new_pwd = "password2";
@@ -903,18 +966,19 @@ mod tests {
         let (user, records) =
             User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
         let records = records.records();
+        println!("{:?}", records);
         let modified_record = records.iter().find(|r| r.0 == user_data.domain);
         let modified_record = match modified_record {
-            Some(record) => Some(record.1.clone()),
-            None => None,
+            Some(record) => record,
+            None => panic!("Record not found"),
         };
+        let pwd = modified_record.1.clone();
 
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
 
         assert_eq!(res.is_ok(), true);
-        assert_eq!(modified_record.is_some(), true);
-        assert_eq!(modified_record.unwrap(), new_pwd);
+        assert_eq!(pwd, new_pwd);
         assert_eq!(records.len(), 1);
     }
 
