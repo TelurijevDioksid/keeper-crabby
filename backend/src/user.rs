@@ -53,10 +53,6 @@ impl CipherConfig {
         }
     }
 
-    fn len(&self) -> usize {
-        self.salt.len() + self.nonce.len() + size_of::<u32>() + self.ciphertext.len()
-    }
-
     fn write(&self, buffer: &mut Vec<u8>) {
         // this is needed to get the length of the ciphertext
         // so that we can read it back from the file
