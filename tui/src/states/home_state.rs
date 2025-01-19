@@ -214,8 +214,8 @@ impl Home {
         }
     }
 
-    fn render_secrets(&self, buffer: &mut Buffer, cursor_offset: u16) {
-        let mut y = 0;
+    fn render_secrets(&self, buffer: &mut Buffer, cursor_offset: u16, y_offset: u16) {
+        let mut y = y_offset;
         let mut index = 0;
         for (key, value) in self.secrets.secrets.iter() {
             let style = if self.secrets.selected_secret == index {
@@ -250,6 +250,18 @@ impl Home {
         }
     }
 
+    fn render_legend(&self, buffer: &mut Buffer, area: Rect, cursor_offset: u16) -> u16 {
+        let text = " ".repeat(cursor_offset as usize) + 
+            "j - down | k - up | h - left | l - right | q - quit | a - add | d - delete selected | e - edit selected";
+        let legend = Text::styled(text, Style::default().fg(Color::White));
+        legend.render(Rect::new(0, 0, area.width, 1), buffer);
+
+        let separator = self.separator(buffer.area().width);
+        separator.render(Rect::new(cursor_offset, 1, self.width(), 1), buffer);
+
+        2
+    }
+
     fn buffer_to_render(&self) -> Buffer {
         let cursor_offset = 4;
         let secrets_count = self.secrets.secrets.len();
@@ -257,10 +269,11 @@ impl Home {
             0,
             0,
             self.width() + cursor_offset,
-            (secrets_count as u16 * DOMAIN_PWD_LIST_ITEM_HEIGHT) + 1,
+            (secrets_count as u16 * DOMAIN_PWD_LIST_ITEM_HEIGHT) + 3,
         );
         let mut buffer = Buffer::empty(rect);
-        self.render_secrets(&mut buffer, cursor_offset);
+        let y_offset = self.render_legend(&mut buffer, rect, cursor_offset);
+        self.render_secrets(&mut buffer, cursor_offset, y_offset);
 
         buffer
     }
