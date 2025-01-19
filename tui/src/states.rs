@@ -2,16 +2,14 @@ use ratatui::{crossterm::event::KeyEvent, layout::Rect, Frame};
 
 use crate::{
     popups::Popup,
-    states::{
-        home_state::Home, login_state::Login, register_state::Register, startup_state::StartUp,
-    },
+    states::{home::Home, login::Login, register::Register, startup::StartUp},
     Application,
 };
 
-pub mod home_state;
-pub mod login_state;
-pub mod register_state;
-pub mod startup_state;
+pub mod home;
+pub mod login;
+pub mod register;
+pub mod startup;
 
 #[derive(Clone)]
 pub enum ScreenState {

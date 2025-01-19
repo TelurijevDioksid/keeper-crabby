@@ -15,35 +15,35 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub enum InsertPwdState {
+pub enum InsertDomainPasswordState {
     Domain,
-    Pwd,
+    Password,
     Confirm,
     Quit,
 }
 
 #[derive(Clone, PartialEq)]
-pub enum InsertPwdExitState {
+pub enum InsertDomainPasswordExitState {
     Confirm,
     Quit,
 }
 
 #[derive(Clone)]
-pub struct InsertPwd {
+pub struct InsertDomainPassword {
     pub domain: String,
-    pub pwd: String,
-    pub state: InsertPwdState,
-    pub exit_state: Option<InsertPwdExitState>,
+    pub password: String,
+    pub state: InsertDomainPasswordState,
+    pub exit_state: Option<InsertDomainPasswordExitState>,
     x_percent: u16,
     y_percent: u16,
 }
 
-impl InsertPwd {
+impl InsertDomainPassword {
     pub fn new() -> Self {
-        InsertPwd {
+        InsertDomainPassword {
             domain: String::new(),
-            pwd: String::new(),
-            state: InsertPwdState::Domain,
+            password: String::new(),
+            state: InsertDomainPasswordState::Domain,
             exit_state: None,
             x_percent: 40,
             y_percent: 20,
@@ -54,20 +54,20 @@ impl InsertPwd {
         self.domain.push(c);
     }
 
-    pub fn pwd_append(&mut self, c: char) {
-        self.pwd.push(c);
+    pub fn password_append(&mut self, c: char) {
+        self.password.push(c);
     }
 
     pub fn domain_pop(&mut self) {
         self.domain.pop();
     }
 
-    pub fn pwd_pop(&mut self) {
-        self.pwd.pop();
+    pub fn password_pop(&mut self) {
+        self.password.pop();
     }
 }
 
-impl Popup for InsertPwd {
+impl Popup for InsertDomainPassword {
     fn render(&self, f: &mut Frame, _app: &Application, rect: Rect) {
         let layout = Layout::default()
             .direction(Direction::Vertical)
@@ -81,18 +81,19 @@ impl Popup for InsertPwd {
         let text = vec![Line::from(vec![Span::raw(self.domain.clone())])];
         let domain_p = Paragraph::new(text).block(Block::bordered().title("Domain").border_style(
             Style::default().fg(match self.state {
-                InsertPwdState::Domain => Color::White,
+                InsertDomainPasswordState::Domain => Color::White,
                 _ => Color::DarkGray,
             }),
         ));
 
-        let text = vec![Line::from(vec![Span::raw(self.pwd.clone())])];
-        let pwd_p = Paragraph::new(text).block(Block::bordered().title("Password").border_style(
-            Style::default().fg(match self.state {
-                InsertPwdState::Pwd => Color::White,
-                _ => Color::DarkGray,
-            }),
-        ));
+        let text = vec![Line::from(vec![Span::raw(self.password.clone())])];
+        let password_p =
+            Paragraph::new(text).block(Block::bordered().title("Password").border_style(
+                Style::default().fg(match self.state {
+                    InsertDomainPasswordState::Password => Color::White,
+                    _ => Color::DarkGray,
+                }),
+            ));
 
         let inner_layout = Layout::default()
             .direction(Direction::Horizontal)
@@ -101,21 +102,21 @@ impl Popup for InsertPwd {
 
         let quit_p = Paragraph::new(Span::raw("Quit")).block(Block::bordered().border_style(
             Style::default().fg(match self.state {
-                InsertPwdState::Quit => Color::White,
+                InsertDomainPasswordState::Quit => Color::White,
                 _ => Color::DarkGray,
             }),
         ));
 
         let confirm_p = Paragraph::new(Span::raw("Confirm")).block(Block::bordered().border_style(
             Style::default().fg(match self.state {
-                InsertPwdState::Confirm => Color::White,
+                InsertDomainPasswordState::Confirm => Color::White,
                 _ => Color::DarkGray,
             }),
         ));
 
         f.render_widget(Clear, rect);
         f.render_widget(domain_p, layout[0]);
-        f.render_widget(pwd_p, layout[1]);
+        f.render_widget(password_p, layout[1]);
         f.render_widget(quit_p, inner_layout[0]);
         f.render_widget(confirm_p, inner_layout[1]);
     }
@@ -129,7 +130,7 @@ impl Popup for InsertPwd {
         let mut poped = false;
 
         match self.state {
-            InsertPwdState::Domain => match key.code {
+            InsertDomainPasswordState::Domain => match key.code {
                 KeyCode::Char(c) => {
                     self.domain_append(c);
                 }
@@ -137,66 +138,66 @@ impl Popup for InsertPwd {
                     self.domain_pop();
                 }
                 KeyCode::Up => {
-                    self.state = InsertPwdState::Quit;
+                    self.state = InsertDomainPasswordState::Quit;
                 }
                 KeyCode::Down | KeyCode::Tab | KeyCode::Enter => {
-                    self.state = InsertPwdState::Pwd;
+                    self.state = InsertDomainPasswordState::Password;
                 }
                 _ => {}
             },
-            InsertPwdState::Pwd => match key.code {
+            InsertDomainPasswordState::Password => match key.code {
                 KeyCode::Char('g') => {
                     if key.modifiers.contains(KeyModifiers::CONTROL) {
-                        self.pwd = generate_password();
+                        self.password = generate_password();
                     } else {
-                        self.pwd_append('g');
+                        self.password_append('g');
                     }
                 }
                 KeyCode::Char(c) => {
-                    self.pwd_append(c);
+                    self.password_append(c);
                 }
                 KeyCode::Backspace => {
-                    self.pwd_pop();
+                    self.password_pop();
                 }
                 KeyCode::Up => {
-                    self.state = InsertPwdState::Domain;
+                    self.state = InsertDomainPasswordState::Domain;
                 }
                 KeyCode::Down | KeyCode::Tab | KeyCode::Enter => {
-                    self.state = InsertPwdState::Quit;
+                    self.state = InsertDomainPasswordState::Quit;
                 }
                 _ => {}
             },
-            InsertPwdState::Quit => match key.code {
+            InsertDomainPasswordState::Quit => match key.code {
                 KeyCode::Enter => {
                     app.mutable_app_state.popups.pop();
-                    self.exit_state = Some(InsertPwdExitState::Quit);
+                    self.exit_state = Some(InsertDomainPasswordExitState::Quit);
                     poped = true;
                 }
                 KeyCode::Up => {
-                    self.state = InsertPwdState::Pwd;
+                    self.state = InsertDomainPasswordState::Password;
                 }
                 KeyCode::Right | KeyCode::Tab | KeyCode::Left => {
-                    self.state = InsertPwdState::Confirm;
+                    self.state = InsertDomainPasswordState::Confirm;
                 }
                 KeyCode::Down => {
-                    self.state = InsertPwdState::Domain;
+                    self.state = InsertDomainPasswordState::Domain;
                 }
                 _ => {}
             },
-            InsertPwdState::Confirm => match key.code {
+            InsertDomainPasswordState::Confirm => match key.code {
                 KeyCode::Enter => {
                     app.mutable_app_state.popups.pop();
-                    self.exit_state = Some(InsertPwdExitState::Confirm);
+                    self.exit_state = Some(InsertDomainPasswordExitState::Confirm);
                     poped = true;
                 }
                 KeyCode::Left | KeyCode::Right => {
-                    self.state = InsertPwdState::Quit;
+                    self.state = InsertDomainPasswordState::Quit;
                 }
                 KeyCode::Down | KeyCode::Tab => {
-                    self.state = InsertPwdState::Domain;
+                    self.state = InsertDomainPasswordState::Domain;
                 }
                 KeyCode::Up => {
-                    self.state = InsertPwdState::Pwd;
+                    self.state = InsertDomainPasswordState::Password;
                 }
                 _ => {}
             },
@@ -216,6 +217,6 @@ impl Popup for InsertPwd {
     }
 
     fn popup_type(&self) -> PopupType {
-        PopupType::InsertPwd
+        PopupType::InsertDomainPassword
     }
 }

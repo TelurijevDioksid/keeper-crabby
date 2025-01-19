@@ -13,14 +13,14 @@ use krab_backend::user::{RecordOperationConfig, User};
 
 use crate::{
     popups::{
-        insert_pwd_popup::{InsertPwd, InsertPwdExitState},
-        message_popup::MessagePopup,
+        insert_domain_password::{InsertDomainPassword, InsertDomainPasswordExitState},
+        message::MessagePopup,
         Popup,
     },
     Application,
     {
         centered_rect,
-        states::{startup_state::StartUp, ScreenState},
+        states::{startup::StartUp, ScreenState},
         State,
     },
 };
@@ -41,7 +41,7 @@ pub struct Register {
     pub confirm_master_password: String,
     pub state: RegisterState,
     pub domain: String,
-    pub pwd: String,
+    pub password: String,
     pub path: PathBuf,
 }
 
@@ -53,7 +53,7 @@ impl Register {
             confirm_master_password: String::new(),
             state: RegisterState::Username,
             domain: String::new(),
-            pwd: String::new(),
+            password: String::new(),
             path: path.clone(),
         }
     }
@@ -224,7 +224,7 @@ impl State for Register {
                 KeyCode::Enter => {
                     app.mutable_app_state
                         .popups
-                        .push(Box::new(InsertPwd::new()));
+                        .push(Box::new(InsertDomainPassword::new()));
                     change_state = true;
                 }
                 KeyCode::Right | KeyCode::Left => {
@@ -263,16 +263,16 @@ impl State for Register {
         }
 
         let domain: String;
-        let pwd: String;
-        let insert_pwd = _popup.downcast::<InsertPwd>();
+        let password: String;
+        let insert_password = _popup.downcast::<InsertDomainPassword>();
 
-        match insert_pwd {
-            Ok(insert_pwd) => {
-                if insert_pwd.exit_state == Some(InsertPwdExitState::Quit) {
+        match insert_password {
+            Ok(insert_password) => {
+                if insert_password.exit_state == Some(InsertDomainPasswordExitState::Quit) {
                     return app;
                 }
-                domain = insert_pwd.domain.clone();
-                pwd = insert_pwd.pwd.clone();
+                domain = insert_password.domain.clone();
+                password = insert_password.password.clone();
             }
             Err(_) => {
                 unreachable!();
@@ -285,7 +285,7 @@ impl State for Register {
             &self.username,
             &self.master_password,
             &domain,
-            &pwd,
+            &password,
             &self.path,
         );
 

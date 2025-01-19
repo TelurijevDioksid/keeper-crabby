@@ -14,7 +14,7 @@ use ratatui::{
 
 use crate::{
     popups::{Popup, PopupType},
-    states::{startup_state::StartUp, ScreenState, State},
+    states::{startup::StartUp, ScreenState, State},
 };
 
 pub mod components;
@@ -78,7 +78,7 @@ fn run_app<B: Backend>(
                 if let Some(last_state) = last_state {
                     let mut new_app: Application = app.clone();
                     match last_state.popup_type() {
-                        PopupType::InsertPwd => match &mut app.state {
+                        PopupType::InsertDomainPassword => match &mut app.state {
                             ScreenState::Register(s) => {
                                 new_app = s.handle_insert_record_popup(new_app, last_state);
                             }

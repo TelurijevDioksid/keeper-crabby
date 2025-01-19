@@ -17,10 +17,10 @@ use krab_backend::{
 
 use crate::{
     centered_rect,
-    popups::message_popup::MessagePopup,
+    popups::message::MessagePopup,
     states::{
-        home_state::{Home, Position},
-        startup_state::StartUp,
+        home::{Home, Position},
+        startup::StartUp,
         ScreenState, State,
     },
     Application,
@@ -70,7 +70,7 @@ impl Login {
     }
 
     // this needs to be reworked
-    // this function should return a vector of cipher configs and a master pwd
+    // this function should return a vector of cipher configs and a master password
     // or does it?
     pub fn login(&self) -> Result<(User, ReadOnlyRecords), String> {
         let user_exists = check_user(&self.username, self.path.clone());

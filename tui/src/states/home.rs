@@ -12,22 +12,22 @@ use krab_backend::user::{ReadOnlyRecords, RecordOperationConfig, User};
 use crate::{
     components::scrollable_view::ScrollView,
     popups::{
-        insert_master_popup::{InsertMaster, InsertMasterExitState},
-        insert_pwd_popup::{InsertPwd, InsertPwdExitState},
-        message_popup::MessagePopup,
+        insert_domain_password::{InsertDomainPassword, InsertDomainPasswordExitState},
+        insert_master::{InsertMaster, InsertMasterExitState},
+        message::MessagePopup,
         Popup,
     },
-    states::{login_state::Login, State},
+    states::{login::Login, State},
     Application, ScreenState,
 };
 
-const SELECTED_DOMAIN_PWD_BG_COLOR: Color = Color::Rgb(202, 220, 252);
-const SELECTED_DOMAIN_PWD_FG_COLOR: Color = Color::Rgb(0, 36, 107);
-const DOMAIN_PWD_LIST_ITEM_HEIGHT: u16 = 4;
+const SELECTED_DOMAIN_PASSWORD_BG_COLOR: Color = Color::Rgb(202, 220, 252);
+const SELECTED_DOMAIN_PASSWORD_FG_COLOR: Color = Color::Rgb(0, 36, 107);
+const DOMAIN_PASSWORD_LIST_ITEM_HEIGHT: u16 = 4;
 const RIGHT_MARGIN: u16 = 6;
 const LEFT_PADDING: u16 = 2;
 const MAX_ENTRY_LENGTH: u16 = 32;
-const DOMAIN_PWD_MIDDLE_WIDTH: u16 = 3;
+const DOMAIN_PASSWORD_MIDDLE_WIDTH: u16 = 3;
 
 fn hidden_value(domain: String) -> String {
     assert!(domain.len() <= MAX_ENTRY_LENGTH as usize);
@@ -51,7 +51,7 @@ enum Operation {
 #[derive(Debug, Clone, PartialEq)]
 struct NewSecret {
     domain: String,
-    pwd: String,
+    password: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -149,14 +149,14 @@ impl Home {
         let (_, inner_buffer_height) = ScrollView::inner_buffer_bounding_box(area);
         let mut position = self.position.clone();
         if selected_secret > previous_selected_secret {
-            if selected_secret as u16 * DOMAIN_PWD_LIST_ITEM_HEIGHT + 1
+            if selected_secret as u16 * DOMAIN_PASSWORD_LIST_ITEM_HEIGHT + 1
                 >= inner_buffer_height + position.offset_y
             {
-                position.offset_y += DOMAIN_PWD_LIST_ITEM_HEIGHT;
+                position.offset_y += DOMAIN_PASSWORD_LIST_ITEM_HEIGHT;
             }
         } else {
-            if selected_secret as u16 * DOMAIN_PWD_LIST_ITEM_HEIGHT + 1 <= position.offset_y {
-                position.offset_y -= DOMAIN_PWD_LIST_ITEM_HEIGHT;
+            if selected_secret as u16 * DOMAIN_PASSWORD_LIST_ITEM_HEIGHT + 1 <= position.offset_y {
+                position.offset_y -= DOMAIN_PASSWORD_LIST_ITEM_HEIGHT;
             }
         }
         self.secrets.selected_secret = selected_secret;
@@ -204,9 +204,10 @@ impl Home {
     }
 
     fn width(&self) -> u16 {
-        let max_domain_pwd_width = MAX_ENTRY_LENGTH * 2 + LEFT_PADDING + DOMAIN_PWD_MIDDLE_WIDTH;
+        let max_domain_password_width =
+            MAX_ENTRY_LENGTH * 2 + LEFT_PADDING + DOMAIN_PASSWORD_MIDDLE_WIDTH;
 
-        let width = max_domain_pwd_width + RIGHT_MARGIN;
+        let width = max_domain_password_width + RIGHT_MARGIN;
         if width > self.area.width / 2 {
             width
         } else {
@@ -220,8 +221,8 @@ impl Home {
         for (key, value) in self.secrets.secrets.iter() {
             let style = if self.secrets.selected_secret == index {
                 Style::default()
-                    .bg(SELECTED_DOMAIN_PWD_BG_COLOR)
-                    .fg(SELECTED_DOMAIN_PWD_FG_COLOR)
+                    .bg(SELECTED_DOMAIN_PASSWORD_BG_COLOR)
+                    .fg(SELECTED_DOMAIN_PASSWORD_FG_COLOR)
             } else {
                 Style::default()
             };
@@ -269,7 +270,7 @@ impl Home {
             0,
             0,
             self.width() + cursor_offset,
-            (secrets_count as u16 * DOMAIN_PWD_LIST_ITEM_HEIGHT) + 3,
+            (secrets_count as u16 * DOMAIN_PASSWORD_LIST_ITEM_HEIGHT) + 3,
         );
         let mut buffer = Buffer::empty(rect);
         let y_offset = self.render_legend(&mut buffer, rect, cursor_offset);
@@ -326,7 +327,7 @@ impl State for Home {
         if key.code == KeyCode::Char('a') {
             app.mutable_app_state
                 .popups
-                .push(Box::new(InsertPwd::new()));
+                .push(Box::new(InsertDomainPassword::new()));
             self.operation = Some(Operation::Add);
         }
         if key.code == KeyCode::Char('d') {
@@ -349,23 +350,23 @@ impl State for Home {
         _popup: Box<dyn Popup>,
     ) -> Application {
         let domain: String;
-        let pwd: String;
-        let insert_pwd = _popup.downcast::<InsertPwd>();
+        let password: String;
+        let insert_password = _popup.downcast::<InsertDomainPassword>();
 
-        match insert_pwd {
-            Ok(insert_pwd) => {
-                if insert_pwd.exit_state == Some(InsertPwdExitState::Quit) {
+        match insert_password {
+            Ok(insert_password) => {
+                if insert_password.exit_state == Some(InsertDomainPasswordExitState::Quit) {
                     return app;
                 }
-                domain = insert_pwd.domain.clone();
-                pwd = insert_pwd.pwd.clone();
+                domain = insert_password.domain.clone();
+                password = insert_password.password.clone();
             }
             Err(_) => {
                 unreachable!();
             }
         }
 
-        if domain.is_empty() || pwd.is_empty() {
+        if domain.is_empty() || password.is_empty() {
             let mut app = app.clone();
             app.mutable_app_state
                 .popups
@@ -377,7 +378,7 @@ impl State for Home {
 
         self.new_secret = Some(NewSecret {
             domain: domain.clone(),
-            pwd: pwd.clone(),
+            password: password.clone(),
         });
 
         let mut app = app.clone();
@@ -430,7 +431,7 @@ impl State for Home {
                     &self.user.username(),
                     &master_password,
                     &self.new_secret.clone().unwrap().domain,
-                    &self.new_secret.clone().unwrap().pwd,
+                    &self.new_secret.clone().unwrap().password,
                     &app.immutable_app_state.db_path,
                 );
 

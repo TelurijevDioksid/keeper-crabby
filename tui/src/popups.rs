@@ -5,14 +5,14 @@ use ratatui::{crossterm::event::KeyEvent, layout::Rect, Frame};
 
 use crate::Application;
 
-pub mod exit_popup;
-pub mod insert_master_popup;
-pub mod insert_pwd_popup;
-pub mod message_popup;
+pub mod exit;
+pub mod insert_domain_password;
+pub mod insert_master;
+pub mod message;
 
 pub enum PopupType {
     Exit,
-    InsertPwd,
+    InsertDomainPassword,
     Message,
     InsertMaster,
 }

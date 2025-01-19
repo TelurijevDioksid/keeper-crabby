@@ -59,17 +59,20 @@ impl CipherConfig {
         }
     }
 
-    fn marshal(domain: &str, pwd: &str) -> String {
+    fn marshal(domain: &str, password: &str) -> String {
         let marshal_domain = domain.to_string().replace("\\", "\\\\").replace(" ", "\\s");
-        let marshal_pwd = pwd.to_string().replace("\\", "\\\\").replace(" ", "\\s");
-        format!("{} {}", marshal_domain, marshal_pwd)
+        let marshal_password = password
+            .to_string()
+            .replace("\\", "\\\\")
+            .replace(" ", "\\s");
+        format!("{} {}", marshal_domain, marshal_password)
     }
 
     fn unmarshal(data: &str) -> (String, String) {
         let parts: Vec<&str> = data.split_whitespace().collect();
         let domain = parts[0].replace("\\s", " ").replace("\\\\", "\\");
-        let pwd = parts[1].replace("\\s", " ").replace("\\\\", "\\");
-        (domain, pwd)
+        let password = parts[1].replace("\\s", " ").replace("\\\\", "\\");
+        (domain, password)
     }
 
     fn write(&self, buffer: &mut Vec<u8>) {
@@ -85,8 +88,12 @@ impl CipherConfig {
         buffer.append(&mut data);
     }
 
-    fn encrypt_data(domain: &str, password: &str, master_pwd: &str) -> Result<Self, aead::Error> {
-        let derived_key = DerivedKey::derive_key(master_pwd, None);
+    fn encrypt_data(
+        domain: &str,
+        password: &str,
+        master_password: &str,
+    ) -> Result<Self, aead::Error> {
+        let derived_key = DerivedKey::derive_key(master_password, None);
         let salt = derived_key.salt;
         let key = Key::<Aes128GcmSiv>::clone_from_slice(&derived_key.key);
         let cipher = Aes128GcmSiv::new(&key);
@@ -100,10 +107,10 @@ impl CipherConfig {
     fn decrypt_data(&self) -> Result<DomainPasswordPair, aead::Error> {
         let cipher = Aes128GcmSiv::new(&self.key);
         let plaintext = cipher.decrypt(&self.nonce, self.ciphertext.as_ref())?;
-        let (domain, pwd) = CipherConfig::unmarshal(str::from_utf8(&plaintext).unwrap());
+        let (domain, password) = CipherConfig::unmarshal(str::from_utf8(&plaintext).unwrap());
         Ok(DomainPasswordPair {
             domain,
-            password: pwd,
+            password: password,
         })
     }
 }
@@ -141,14 +148,14 @@ impl Record {
 
     fn read_from_bytes(
         bytes: Vec<u8>,
-        master_pwd: &str,
+        master_password: &str,
         offset: u32,
     ) -> Result<(Self, Vec<u8>, u32), aead::Error> {
         let salt = bytes[0..22].to_vec();
         let nonce = GenericArray::clone_from_slice(&bytes[22..34]);
         let ciphertext_len = u32::from_be_bytes(bytes[34..38].try_into().unwrap());
         let ciphertext = bytes[38..(38 + ciphertext_len as usize)].to_vec();
-        let derived_key = DerivedKey::derive_key(master_pwd, Some(salt.clone()));
+        let derived_key = DerivedKey::derive_key(master_password, Some(salt.clone()));
         let key = Key::<Aes128GcmSiv>::clone_from_slice(&derived_key.key);
         let cipher_config = CipherConfig::new(key, salt, nonce, ciphertext);
         let current_offset = 38 + ciphertext_len as usize + offset as usize;
@@ -165,11 +172,11 @@ impl Record {
     ///
     /// * `p` - Path to the directory where the file (users data) is stored
     /// * `username` - The username of the user
-    /// * `master_pwd` - The master password of the user
+    /// * `master_password` - The master password of the user
     ///
     /// # Returns
     /// * `Result<Vec<Self>, String>` - A vector of records or an error message
-    fn read_user(p: &PathBuf, username: &str, master_pwd: &str) -> Result<Vec<Self>, String> {
+    fn read_user(p: &PathBuf, username: &str, master_password: &str) -> Result<Vec<Self>, String> {
         let hash = hash(username.to_string());
         let file_path = p.join(hash.as_str());
         let mut data: Vec<Record> = Vec::new();
@@ -178,7 +185,7 @@ impl Record {
             let mut bytes = fs::read(file_path).unwrap();
             let mut run = true;
             while run {
-                let res = Record::read_from_bytes(bytes, master_pwd, offset);
+                let res = Record::read_from_bytes(bytes, master_password, offset);
                 if res.is_err() {
                     return Err("Could not read user".to_string());
                 }
@@ -206,9 +213,9 @@ impl User {
     pub fn from(
         path: &PathBuf,
         username: &str,
-        master_pwd: &str,
+        master_password: &str,
     ) -> Result<(Self, ReadOnlyRecords), String> {
-        let records = Record::read_user(path, username, master_pwd);
+        let records = Record::read_user(path, username, master_password);
         let records = match records {
             Ok(r) => r,
             Err(e) => return Err(e),
@@ -242,7 +249,8 @@ impl User {
             Err(_) => return Err("Could not create file.".to_string()),
         };
 
-        let cipher = CipherConfig::encrypt_data(&user.domain, &user.pwd, &user.master_pwd);
+        let cipher =
+            CipherConfig::encrypt_data(&user.domain, &user.password, &user.master_password);
         let cipher = match cipher {
             Ok(cipher) => cipher,
             Err(_) => return Err("Could not encrypt data.".to_string()),
@@ -261,7 +269,7 @@ impl User {
 
     pub fn add_record(&mut self, record: RecordOperationConfig) -> Result<ReadOnlyRecords, String> {
         let (integrity, ro_records) =
-            self.check_integrity(&record.username, &record.master_pwd, &record.path);
+            self.check_integrity(&record.username, &record.master_password, &record.path);
 
         let mut ro_records = match ro_records {
             Some(ro_records) => ro_records,
@@ -276,8 +284,9 @@ impl User {
             return Err("Record already exists".to_string());
         }
 
-        ro_records.add_record(&record.domain, &record.pwd);
-        let cipher = CipherConfig::encrypt_data(&record.domain, &record.pwd, &record.master_pwd);
+        ro_records.add_record(&record.domain, &record.password);
+        let cipher =
+            CipherConfig::encrypt_data(&record.domain, &record.password, &record.master_password);
         let cipher = match cipher {
             Ok(cipher) => cipher,
             Err(_) => return Err("Could not create user.".to_string()),
@@ -298,7 +307,7 @@ impl User {
         record: RecordOperationConfig,
     ) -> Result<ReadOnlyRecords, String> {
         let (integrity, ro_records) =
-            self.check_integrity(&record.username, &record.master_pwd, &record.path);
+            self.check_integrity(&record.username, &record.master_password, &record.path);
 
         let mut ro_records = match ro_records {
             Some(ro_records) => ro_records,
@@ -350,7 +359,7 @@ impl User {
         record: RecordOperationConfig,
     ) -> Result<ReadOnlyRecords, String> {
         let (integrity, ro_records) =
-            self.check_integrity(&record.username, &record.master_pwd, &record.path);
+            self.check_integrity(&record.username, &record.master_password, &record.path);
 
         let mut ro_records = match ro_records {
             Some(ro_records) => ro_records,
@@ -381,9 +390,10 @@ impl User {
             return Err("Record not found".to_string());
         }
 
-        ro_records.add_record(&record.domain, &record.pwd);
+        ro_records.add_record(&record.domain, &record.password);
 
-        let cipher = CipherConfig::encrypt_data(&record.domain, &record.pwd, &record.master_pwd);
+        let cipher =
+            CipherConfig::encrypt_data(&record.domain, &record.password, &record.master_password);
         let cipher = match cipher {
             Ok(cipher) => cipher,
             Err(_) => return Err("Could not create user.".to_string()),
@@ -422,10 +432,10 @@ impl User {
     fn check_integrity(
         &self,
         username: &str,
-        master_pwd: &str,
+        master_password: &str,
         path: &PathBuf,
     ) -> (bool, Option<ReadOnlyRecords>) {
-        let records = Record::read_user(path, username, master_pwd);
+        let records = Record::read_user(path, username, master_password);
 
         match records {
             Ok(r) => {
@@ -462,8 +472,8 @@ impl ReadOnlyRecords {
         self.0.clone()
     }
 
-    fn add_record(&mut self, domain: &String, pwd: &String) {
-        self.0.push((domain.clone(), pwd.clone()));
+    fn add_record(&mut self, domain: &String, password: &String) {
+        self.0.push((domain.clone(), password.clone()));
     }
 
     fn remove_record(&mut self, domain: &String) {
@@ -497,10 +507,11 @@ mod tests {
     fn setup_user_data(domain: &str) -> Result<RecordOperationConfig, String> {
         let username = generate_random_username();
         let username = username.as_str().to_owned();
-        let master_pwd = "password";
-        let pwd = "password";
+        let master_password = "password";
+        let password = "password";
         let path = PathBuf::from(env::var("KRAB_TEMP_DIR").unwrap());
-        let user = RecordOperationConfig::new(username.as_str(), master_pwd, domain, pwd, &path);
+        let user =
+            RecordOperationConfig::new(username.as_str(), master_password, domain, password, &path);
         match User::new(&user) {
             Ok(_) => Ok(user.clone()),
             Err(e) => Err(e),
@@ -508,7 +519,7 @@ mod tests {
     }
 
     fn create_user(config: &RecordOperationConfig) -> Result<(User, ReadOnlyRecords), String> {
-        User::from(&config.path, &config.username, &config.master_pwd)
+        User::from(&config.path, &config.username, &config.master_password)
     }
 
     #[test]
@@ -524,48 +535,48 @@ mod tests {
     #[test]
     fn test_marshalling() {
         let domain = "example.com";
-        let pwd = "password";
-        let data = CipherConfig::marshal(domain, pwd);
+        let password = "password";
+        let data = CipherConfig::marshal(domain, password);
         let (d, p) = CipherConfig::unmarshal(data.as_str());
         assert_eq!(d, domain);
-        assert_eq!(p, pwd);
+        assert_eq!(p, password);
 
         let domain = "example.com with spaces";
-        let pwd = "password with spaces";
-        let data = CipherConfig::marshal(domain, pwd);
+        let password = "password with spaces";
+        let data = CipherConfig::marshal(domain, password);
         let (d, p) = CipherConfig::unmarshal(data.as_str());
         assert_eq!(d, domain);
-        assert_eq!(p, pwd);
+        assert_eq!(p, password);
 
         let domain = "example.com with \\";
-        let pwd = "password with \\";
-        let data = CipherConfig::marshal(domain, pwd);
+        let password = "password with \\";
+        let data = CipherConfig::marshal(domain, password);
         let (d, p) = CipherConfig::unmarshal(data.as_str());
         assert_eq!(d, domain);
-        assert_eq!(p, pwd);
+        assert_eq!(p, password);
 
         let domain = "example.com with \\ and    spacessss";
-        let pwd = "password with \\ and    spacessss";
-        let data = CipherConfig::marshal(domain, pwd);
+        let password = "password with \\ and    spacessss";
+        let data = CipherConfig::marshal(domain, password);
         let (d, p) = CipherConfig::unmarshal(data.as_str());
         assert_eq!(d, domain);
-        assert_eq!(p, pwd);
+        assert_eq!(p, password);
     }
 
     #[test]
     fn test_cipher_config() {
         let domain = "example.com";
-        let pwd = "password";
-        let data = CipherConfig::marshal(domain, pwd);
-        let master_pwd = "password";
-        let cipher = CipherConfig::encrypt_data(domain, pwd, master_pwd).unwrap();
+        let password = "password";
+        let data = CipherConfig::marshal(domain, password);
+        let master_password = "password";
+        let cipher = CipherConfig::encrypt_data(domain, password, master_password).unwrap();
         let decrypted = cipher.decrypt_data().unwrap();
         let decrypted = format!("{} {}", decrypted.domain, decrypted.password);
         assert_eq!(decrypted, data);
 
         let domain = "example.com with  spaces and \\";
-        let pwd = "password with  spaces and \\";
-        let data = CipherConfig::marshal(domain, pwd);
+        let password = "password with  spaces and \\";
+        let data = CipherConfig::marshal(domain, password);
         let marshalled =
             "example.com\\swith\\s\\sspaces\\sand\\s\\\\ password\\swith\\s\\sspaces\\sand\\s\\\\"
                 .to_string();
@@ -594,14 +605,14 @@ mod tests {
 
         let username = generate_random_username();
         let username = username.as_str();
-        let master_pwd = "password";
+        let master_password = "password";
         let domain = "example.com";
-        let pwd = "password";
+        let password = "password";
         let path = PathBuf::from(env::var("KRAB_TEMP_DIR").unwrap());
-        let config = RecordOperationConfig::new(username, master_pwd, domain, pwd, &path);
+        let config = RecordOperationConfig::new(username, master_password, domain, password, &path);
         let _ = User::new(&config);
 
-        let config = RecordOperationConfig::new(username, master_pwd, domain, pwd, &path);
+        let config = RecordOperationConfig::new(username, master_password, domain, password, &path);
         let res = User::new(&config);
 
         // delete the file (user)
@@ -617,8 +628,11 @@ mod tests {
         let user_data = setup_user_data("example.com").unwrap();
         let (user, _) = create_user(&user_data).unwrap();
 
-        let (integrity, _) =
-            user.check_integrity(&user_data.username, &user_data.master_pwd, &user_data.path);
+        let (integrity, _) = user.check_integrity(
+            &user_data.username,
+            &user_data.master_password,
+            &user_data.path,
+        );
 
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
@@ -632,7 +646,7 @@ mod tests {
         let (user, _) = create_user(&user_data).unwrap();
 
         let (integrity, _) =
-            user.check_integrity(&user_data.username, "wrong_pwd", &user_data.path);
+            user.check_integrity(&user_data.username, "wrong_password", &user_data.path);
 
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
@@ -646,34 +660,34 @@ mod tests {
         let (user, records) = create_user(&user_data).unwrap();
 
         let records = records.records();
-        let (domain, pwd) = records.first().unwrap();
+        let (domain, password) = records.first().unwrap();
 
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
 
         assert_eq!(records.len(), 1);
         assert_eq!(domain, "example.com");
-        assert_eq!(pwd, "password");
+        assert_eq!(password, "password");
 
         let user_data = setup_user_data("example2. com").unwrap();
         let (user, records) = create_user(&user_data).unwrap();
 
         let records = records.records();
-        let (domain, pwd) = records.first().unwrap();
+        let (domain, password) = records.first().unwrap();
 
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
 
         assert_eq!(records.len(), 1);
         assert_eq!(domain, "example2. com");
-        assert_eq!(pwd, "password");
+        assert_eq!(password, "password");
     }
 
     #[test]
     #[should_panic]
     fn test_read_record_fail() {
         let user_data = setup_user_data("example.com").unwrap();
-        let try_user = User::from(&user_data.path, &user_data.username, "wrong_pwd");
+        let try_user = User::from(&user_data.path, &user_data.username, "wrong_password");
 
         // delete the file (user)
         let hashed_username = hash(user_data.username);
@@ -690,18 +704,22 @@ mod tests {
         let (mut user, _) = create_user(&user_data).unwrap();
 
         let new_domain = "example2.com";
-        let new_pwd = "password2";
+        let new_password = "password2";
         let add_record = RecordOperationConfig::new(
             &user_data.username,
-            &user_data.master_pwd,
+            &user_data.master_password,
             new_domain,
-            new_pwd,
+            new_password,
             &user_data.path,
         );
         let res = user.add_record(add_record);
 
-        let (user, records) =
-            User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
+        let (user, records) = User::from(
+            &user_data.path,
+            &user_data.username,
+            &user_data.master_password,
+        )
+        .unwrap();
 
         let records = records.records();
 
@@ -729,12 +747,12 @@ mod tests {
         let (mut user, records) = create_user(&user_data).unwrap();
 
         let new_domain = "example2.com";
-        let new_pwd = "password2";
+        let new_password = "password2";
         let add_record = RecordOperationConfig::new(
             &user_data.username,
-            "wrong_pwd",
+            "wrong_password",
             new_domain,
-            new_pwd,
+            new_password,
             &user_data.path,
         );
         let res = user.add_record(add_record);
@@ -752,12 +770,12 @@ mod tests {
         let (mut user, records) = create_user(&user_data).unwrap();
 
         let new_domain = "example.com";
-        let new_pwd = "password2";
+        let new_password = "password2";
         let add_record = RecordOperationConfig::new(
             &user_data.username,
-            &user_data.master_pwd,
+            &user_data.master_password,
             new_domain,
-            new_pwd,
+            new_password,
             &user_data.path,
         );
         let res = user.add_record(add_record);
@@ -775,38 +793,42 @@ mod tests {
         let (mut user, _) = create_user(&user_data).unwrap();
 
         let new_domain = "example2.com";
-        let new_pwd = "password2";
+        let new_password = "password2";
         let add_record = RecordOperationConfig::new(
             &user_data.username,
-            &user_data.master_pwd,
+            &user_data.master_password,
             new_domain,
-            new_pwd,
+            new_password,
             &user_data.path,
         );
         let _ = user.add_record(add_record);
 
         let new_domain = "example3.com";
-        let new_pwd = "password3";
+        let new_password = "password3";
         let add_record = RecordOperationConfig::new(
             &user_data.username,
-            &user_data.master_pwd,
+            &user_data.master_password,
             new_domain,
-            new_pwd,
+            new_password,
             &user_data.path,
         );
         let _ = user.add_record(add_record);
 
         let remove_record = RecordOperationConfig::new(
             &user_data.username,
-            &user_data.master_pwd,
+            &user_data.master_password,
             "example2.com",
             "",
             &user_data.path,
         );
         let res = user.remove_record(remove_record);
 
-        let (user, records) =
-            User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
+        let (user, records) = User::from(
+            &user_data.path,
+            &user_data.username,
+            &user_data.master_password,
+        )
+        .unwrap();
 
         let records = records.records();
         let domains: Vec<String> = records.iter().map(|r| r.0.clone()).collect();
@@ -845,38 +867,42 @@ mod tests {
         let (mut user, _) = create_user(&user_data).unwrap();
 
         let new_domain = "example2.com";
-        let new_pwd = "password2";
+        let new_password = "password2";
         let add_record = RecordOperationConfig::new(
             &user_data.username,
-            &user_data.master_pwd,
+            &user_data.master_password,
             new_domain,
-            new_pwd,
+            new_password,
             &user_data.path,
         );
         let _ = user.add_record(add_record);
 
         let new_domain = "example3.com";
-        let new_pwd = "password3";
+        let new_password = "password3";
         let add_record = RecordOperationConfig::new(
             &user_data.username,
-            &user_data.master_pwd,
+            &user_data.master_password,
             new_domain,
-            new_pwd,
+            new_password,
             &user_data.path,
         );
         let _ = user.add_record(add_record);
 
         let remove_record = RecordOperationConfig::new(
             &user_data.username,
-            &user_data.master_pwd,
+            &user_data.master_password,
             "example2.com",
             "",
             &user_data.path,
         );
         let res = user.remove_record(remove_record);
 
-        let (user, records) =
-            User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
+        let (user, records) = User::from(
+            &user_data.path,
+            &user_data.username,
+            &user_data.master_password,
+        )
+        .unwrap();
         let records = records.records();
 
         // delete the file (user)
@@ -892,19 +918,19 @@ mod tests {
         let (mut user, _) = create_user(&user_data).unwrap();
 
         let new_domain = "example2.com";
-        let new_pwd = "password2";
+        let new_password = "password2";
         let add_record = RecordOperationConfig::new(
             &user_data.username,
-            &user_data.master_pwd,
+            &user_data.master_password,
             new_domain,
-            new_pwd,
+            new_password,
             &user_data.path,
         );
         let _ = user.add_record(add_record);
 
         let remove_record = RecordOperationConfig::new(
             &user_data.username,
-            &user_data.master_pwd,
+            &user_data.master_password,
             "example3.com",
             "",
             &user_data.path,
@@ -923,19 +949,19 @@ mod tests {
         let (mut user, _) = create_user(&user_data).unwrap();
 
         let new_domain = "example2.com";
-        let new_pwd = "password2";
+        let new_password = "password2";
         let add_record = RecordOperationConfig::new(
             &user_data.username,
-            &user_data.master_pwd,
+            &user_data.master_password,
             new_domain,
-            new_pwd,
+            new_password,
             &user_data.path,
         );
         let _ = user.add_record(add_record);
 
         let remove_record = RecordOperationConfig::new(
             &user_data.username,
-            "wrong_pwd",
+            "wrong_password",
             "example2.com",
             "",
             &user_data.path,
@@ -953,18 +979,22 @@ mod tests {
         let user_data = setup_user_data("example.com").unwrap();
         let (mut user, _) = create_user(&user_data).unwrap();
 
-        let new_pwd = "password2";
+        let new_password = "password2";
         let modify_record = RecordOperationConfig::new(
             &user_data.username,
-            &user_data.master_pwd,
+            &user_data.master_password,
             &user_data.domain,
-            new_pwd,
+            new_password,
             &user_data.path,
         );
         let res = user.modify_record(modify_record);
 
-        let (user, records) =
-            User::from(&user_data.path, &user_data.username, &user_data.master_pwd).unwrap();
+        let (user, records) = User::from(
+            &user_data.path,
+            &user_data.username,
+            &user_data.master_password,
+        )
+        .unwrap();
         let records = records.records();
         println!("{:?}", records);
         let modified_record = records.iter().find(|r| r.0 == user_data.domain);
@@ -972,13 +1002,13 @@ mod tests {
             Some(record) => record,
             None => panic!("Record not found"),
         };
-        let pwd = modified_record.1.clone();
+        let password = modified_record.1.clone();
 
         // delete the file (user)
         fs::remove_file(user.path()).unwrap();
 
         assert_eq!(res.is_ok(), true);
-        assert_eq!(pwd, new_pwd);
+        assert_eq!(password, new_password);
         assert_eq!(records.len(), 1);
     }
 
@@ -987,12 +1017,12 @@ mod tests {
         let user_data = setup_user_data("example.com").unwrap();
         let (mut user, _) = create_user(&user_data).unwrap();
 
-        let new_pwd = "password2";
+        let new_password = "password2";
         let modify_record = RecordOperationConfig::new(
             &user_data.username,
-            "wrong_pwd",
+            "wrong_password",
             &user_data.domain,
-            new_pwd,
+            new_password,
             &user_data.path,
         );
         let res = user.modify_record(modify_record);
@@ -1008,12 +1038,12 @@ mod tests {
         let user_data = setup_user_data("example.com").unwrap();
         let (mut user, _) = create_user(&user_data).unwrap();
 
-        let new_pwd = "password2";
+        let new_password = "password2";
         let modify_record = RecordOperationConfig::new(
             &user_data.username,
-            &user_data.master_pwd,
+            &user_data.master_password,
             "example2.com",
-            new_pwd,
+            new_password,
             &user_data.path,
         );
         let res = user.modify_record(modify_record);

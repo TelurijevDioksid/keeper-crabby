@@ -9,7 +9,7 @@ use ratatui::{
 
 use crate::{
     centered_rect,
-    states::{login_state::Login, register_state::Register, ScreenState, State},
+    states::{login::Login, register::Register, ScreenState, State},
     Application,
 };
 
