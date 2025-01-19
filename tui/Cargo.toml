@@ -9,6 +9,7 @@ ratatui = "0.28.0"
 downcast-rs = "1.2.1"
 dyn-clone = "1.0.17"
 dotenv = "0.15.0"
+cli-clipboard = "0.4.0"
 
 [[bin]]
 name = "krab"

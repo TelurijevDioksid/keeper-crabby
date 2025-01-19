@@ -1,3 +1,4 @@
+use cli_clipboard::{ClipboardContext, ClipboardProvider};
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
     prelude::{Buffer, Rect},
@@ -253,7 +254,7 @@ impl Home {
 
     fn render_legend(&self, buffer: &mut Buffer, area: Rect, cursor_offset: u16) -> u16 {
         let text = " ".repeat(cursor_offset as usize) + 
-            "j - down | k - up | h - left | l - right | q - quit | a - add | d - delete selected | e - edit selected";
+            "j - down | k - up | h - left | l - right | q - quit | a - add | d - delete selected | e - edit selected | c - copy selected";
         let legend = Text::styled(text, Style::default().fg(Color::White));
         legend.render(Rect::new(0, 0, area.width, 1), buffer);
 
@@ -335,6 +336,15 @@ impl State for Home {
                 .popups
                 .push(Box::new(InsertMaster::new()));
             self.operation = Some(Operation::Remove);
+        }
+        if key.code == KeyCode::Char('c') {
+            let current_secret = self
+                .secrets
+                .secrets
+                .get(self.secrets.selected_secret)
+                .unwrap();
+            let mut ctx: ClipboardContext = ClipboardProvider::new().unwrap();
+            ctx.set_contents(current_secret.1.clone()).unwrap();
         }
 
         if !change_state {
