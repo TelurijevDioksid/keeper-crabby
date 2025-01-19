@@ -1,5 +1,6 @@
+use krab_backend::generate_password;
 use ratatui::{
-    crossterm::event::{KeyCode, KeyEvent},
+    crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
     prelude::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::{Line, Span},
@@ -144,6 +145,13 @@ impl Popup for InsertPwd {
                 _ => {}
             },
             InsertPwdState::Pwd => match key.code {
+                KeyCode::Char('g') => {
+                    if key.modifiers.contains(KeyModifiers::CONTROL) {
+                        self.pwd = generate_password();
+                    } else {
+                        self.pwd_append('g');
+                    }
+                }
                 KeyCode::Char(c) => {
                     self.pwd_append(c);
                 }

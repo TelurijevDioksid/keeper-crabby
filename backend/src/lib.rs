@@ -1,4 +1,5 @@
 use directories::ProjectDirs;
+use rand::Rng;
 use sha2::{Digest, Sha256};
 use std::{
     env,
@@ -8,29 +9,22 @@ use std::{
     str,
 };
 
+const INCLUDE_UPPERCASE: bool = true;
+const INCLUDE_NUMBERS: bool = true;
+const INCLUDE_SPECIAL: bool = true;
+
+const LOWERCASE: &str = "abcdefghijklmnopqrstuvwxyz";
+const UPPERCASE: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const NUMBERS: &str = "0123456789";
+const SPECIAL: &str = "!@#$%^&*()-_=+[]{}|;:,.<>?";
+
+const DEFAULT_LENGTH: usize = 16;
+
 mod models;
 pub mod user;
 
 const DB_DIR: &str = "krab";
 const RELEASE_SUFFIX: &str = "release";
-
-fn create_parent_dir(p: &Path) -> io::Result<()> {
-    match p.parent() {
-        Some(parent) => {
-            fs::create_dir_all(parent)?;
-        }
-        None => {}
-    }
-    Ok(())
-}
-
-fn create_if_not_exists(p: &Path) -> io::Result<()> {
-    if !p.exists() {
-        create_parent_dir(p)?;
-        fs::create_dir(p)?;
-    }
-    Ok(())
-}
 
 pub fn init() -> Result<PathBuf, io::Error> {
     if let Some(proj_dirs) = ProjectDirs::from("", "", DB_DIR) {
@@ -59,6 +53,28 @@ pub fn hash(data: String) -> String {
     hasher.update(data);
     let result = hasher.finalize();
     format!("{:x}", result)
+}
+
+pub fn generate_password() -> String {
+    let mut password = String::new();
+    let mut rng = rand::thread_rng();
+    let mut charset = LOWERCASE.to_string();
+    if INCLUDE_UPPERCASE {
+        charset.push_str(UPPERCASE);
+    }
+    if INCLUDE_NUMBERS {
+        charset.push_str(NUMBERS);
+    }
+    if INCLUDE_SPECIAL {
+        charset.push_str(SPECIAL);
+    }
+    let charset: Vec<char> = charset.chars().collect();
+    for _ in 0..DEFAULT_LENGTH {
+        let idx = rng.gen_range(0..charset.len());
+        password.push(charset[idx]);
+    }
+
+    password
 }
 
 pub fn create_file(p: &PathBuf, file_name: &str) -> io::Result<PathBuf> {
@@ -106,5 +122,23 @@ pub fn append_to_file(p: &PathBuf, data: Vec<u8>) -> io::Result<()> {
     }
     let mut f = OpenOptions::new().append(true).open(p)?;
     f.write_all(&data)?;
+    Ok(())
+}
+
+fn create_parent_dir(p: &Path) -> io::Result<()> {
+    match p.parent() {
+        Some(parent) => {
+            fs::create_dir_all(parent)?;
+        }
+        None => {}
+    }
+    Ok(())
+}
+
+fn create_if_not_exists(p: &Path) -> io::Result<()> {
+    if !p.exists() {
+        create_parent_dir(p)?;
+        fs::create_dir(p)?;
+    }
     Ok(())
 }
