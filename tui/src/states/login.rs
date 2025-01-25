@@ -1,12 +1,9 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
     layout::Rect,
     prelude::{Constraint, Direction, Layout},
-    style::{Color, Style},
-    text::{Line, Span},
-    widgets::{Block, Paragraph},
     Frame,
 };
 
@@ -16,7 +13,11 @@ use krab_backend::{
 };
 
 use crate::{
-    centered_rect,
+    centered_absolute_rect,
+    components::{
+        button::{Button, ButtonConfig},
+        input::{Input, InputConfig},
+    },
     popups::message::MessagePopup,
     states::{
         home::{Home, Position},
@@ -25,6 +26,18 @@ use crate::{
     },
     Application,
 };
+
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+enum LoginInput {
+    Username,
+    MasterPassword,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum LoginButton {
+    Confirm,
+    Quit,
+}
 
 // TODO: change to private (LoginInnerState)
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -35,44 +48,30 @@ pub enum LoginState {
     Quit,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Login {
-    pub username: String,
-    pub master_password: String,
-    pub state: LoginState,
-    pub path: PathBuf,
+    username: String,
+    master_password: String,
+    state: LoginState,
+    path: PathBuf,
+    cursors: HashMap<LoginInput, u16>,
 }
 
 impl Login {
-    pub fn username_append(&mut self, c: char) {
-        self.username.push(c);
-    }
-
-    pub fn master_password_append(&mut self, c: char) {
-        self.master_password.push(c);
-    }
-
-    pub fn username_pop(&mut self) {
-        self.username.pop();
-    }
-
-    pub fn master_password_pop(&mut self) {
-        self.master_password.pop();
-    }
-
     pub fn new(path: &PathBuf) -> Self {
+        let mut cursors = HashMap::new();
+        cursors.insert(LoginInput::Username, 0);
+        cursors.insert(LoginInput::MasterPassword, 0);
         Login {
             username: String::new(),
             master_password: String::new(),
             state: LoginState::Username,
             path: path.clone(),
+            cursors,
         }
     }
 
-    // this needs to be reworked
-    // this function should return a vector of cipher configs and a master password
-    // or does it?
-    pub fn login(&self) -> Result<(User, ReadOnlyRecords), String> {
+    fn login(&self) -> Result<(User, ReadOnlyRecords), String> {
         let user_exists = check_user(&self.username, self.path.clone());
         if !user_exists {
             return Err("Cannot login".to_string());
@@ -85,61 +84,80 @@ impl Login {
             Err(_) => Err("Cannot login".to_string()),
         }
     }
+
+    fn generate_input_config(&self, input: LoginInput) -> InputConfig {
+        match input {
+            LoginInput::Username => InputConfig::new(
+                self.state == LoginState::Username,
+                self.username.clone(),
+                false,
+                "Username".to_string(),
+                if self.state == LoginState::Username {
+                    Some(self.cursors.get(&LoginInput::Username).unwrap().clone())
+                } else {
+                    None
+                },
+            ),
+            LoginInput::MasterPassword => InputConfig::new(
+                self.state == LoginState::MasterPassword,
+                self.master_password.clone(),
+                true,
+                "Master Password".to_string(),
+                if self.state == LoginState::MasterPassword {
+                    Some(
+                        self.cursors
+                            .get(&LoginInput::MasterPassword)
+                            .unwrap()
+                            .clone(),
+                    )
+                } else {
+                    None
+                },
+            ),
+        }
+    }
+
+    fn generate_button_config(&self, button: LoginButton) -> ButtonConfig {
+        match button {
+            LoginButton::Confirm => {
+                ButtonConfig::new(self.state == LoginState::Confirm, "Confirm".to_string())
+            }
+            LoginButton::Quit => {
+                ButtonConfig::new(self.state == LoginState::Quit, "Quit".to_string())
+            }
+        }
+    }
 }
 
 impl State for Login {
     fn render(&self, f: &mut Frame, _app: &Application, rect: Rect) {
-        let rect = centered_rect(rect, 50, 40);
+        let height = 2 * InputConfig::height() + ButtonConfig::height();
+        let width = InputConfig::width();
+        let rect = centered_absolute_rect(rect, width, height);
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![
-                Constraint::Length(5),
-                Constraint::Length(5),
-                Constraint::Length(5),
+                Constraint::Length(InputConfig::height()),
+                Constraint::Length(InputConfig::height()),
+                Constraint::Length(ButtonConfig::height()),
             ])
             .split(rect);
-
-        let text = vec![Line::from(vec![Span::raw(self.username.clone())])];
-        let username_p =
-            Paragraph::new(text).block(Block::bordered().title("Username").border_style(
-                Style::default().fg(match self.state {
-                    LoginState::Username => Color::White,
-                    _ => Color::DarkGray,
-                }),
-            ));
-
-        let text = vec![Line::from(vec![Span::raw(self.master_password.clone())])];
-        let master_password_p =
-            Paragraph::new(text).block(Block::bordered().title("Master Password").border_style(
-                Style::default().fg(match self.state {
-                    LoginState::MasterPassword => Color::White,
-                    _ => Color::DarkGray,
-                }),
-            ));
 
         let inner_layout = Layout::default()
             .direction(Direction::Horizontal)
             .constraints(vec![Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
             .split(layout[2]);
 
-        let quit_p = Paragraph::new(Span::raw("Quit")).block(Block::bordered().border_style(
-            Style::default().fg(match self.state {
-                LoginState::Quit => Color::White,
-                _ => Color::DarkGray,
-            }),
-        ));
+        let username_config = self.generate_input_config(LoginInput::Username);
+        let master_password_config = self.generate_input_config(LoginInput::MasterPassword);
+        let confirm_config = self.generate_button_config(LoginButton::Confirm);
+        let quit_config = self.generate_button_config(LoginButton::Quit);
+        let mut buffer = f.buffer_mut();
 
-        let confirm_p = Paragraph::new(Span::raw("Confirm")).block(Block::bordered().border_style(
-            Style::default().fg(match self.state {
-                LoginState::Confirm => Color::White,
-                _ => Color::DarkGray,
-            }),
-        ));
-
-        f.render_widget(username_p, layout[0]);
-        f.render_widget(master_password_p, layout[1]);
-        f.render_widget(quit_p, inner_layout[0]);
-        f.render_widget(confirm_p, inner_layout[1]);
+        Input::render(&mut buffer, layout[0], &username_config);
+        Input::render(&mut buffer, layout[1], &master_password_config);
+        Button::render(&mut buffer, inner_layout[0], &quit_config);
+        Button::render(&mut buffer, inner_layout[1], &confirm_config);
     }
 
     fn handle_key(&mut self, key: &KeyEvent, app: &Application) -> Application {
@@ -148,34 +166,35 @@ impl State for Login {
 
         match self.state {
             LoginState::Username => match key.code {
-                KeyCode::Char(c) => {
-                    self.username_append(c);
-                }
-                KeyCode::Backspace => {
-                    self.username_pop();
-                }
                 KeyCode::Enter | KeyCode::Tab | KeyCode::Down => {
                     self.state = LoginState::MasterPassword;
                 }
                 KeyCode::Up => {
                     self.state = LoginState::Confirm;
                 }
-                _ => {}
+                _ => {
+                    let config = self.generate_input_config(LoginInput::Username);
+                    let (value, cursor_position) =
+                        Input::handle_key(key, &config, self.username.clone());
+                    self.username = value;
+                    self.cursors.insert(LoginInput::Username, cursor_position);
+                }
             },
             LoginState::MasterPassword => match key.code {
-                KeyCode::Char(c) => {
-                    self.master_password_append(c);
-                }
-                KeyCode::Backspace => {
-                    self.master_password_pop();
-                }
                 KeyCode::Enter | KeyCode::Tab | KeyCode::Down => {
                     self.state = LoginState::Quit;
                 }
                 KeyCode::Up => {
                     self.state = LoginState::Username;
                 }
-                _ => {}
+                _ => {
+                    let config = self.generate_input_config(LoginInput::MasterPassword);
+                    let (value, cursor_position) =
+                        Input::handle_key(key, &config, self.master_password.clone());
+                    self.master_password = value;
+                    self.cursors
+                        .insert(LoginInput::MasterPassword, cursor_position);
+                }
             },
             LoginState::Quit => match key.code {
                 KeyCode::Enter => {
@@ -195,12 +214,12 @@ impl State for Login {
             },
             LoginState::Confirm => match key.code {
                 KeyCode::Enter => {
-                    let data = self.login();
-                    match data {
-                        Ok(d) => {
+                    let res = self.login();
+                    match res {
+                        Ok((user, ro_records)) => {
                             app.state = ScreenState::Home(Home::new(
-                                d.0,
-                                d.1,
+                                user,
+                                ro_records,
                                 Position::default(),
                                 app.immutable_app_state.rect.unwrap(),
                             ));

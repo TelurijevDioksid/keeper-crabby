@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Borders, Widget},
 };
 
-use crate::{centered_rect, states::home::Position};
+use crate::{centered_absolute_rect, from, states::home::Position, COLOR_ORANGE, COLOR_WHITE};
 
 pub struct ScrollView {}
 
@@ -16,7 +16,7 @@ impl ScrollView {
         buffer_to_render: &Buffer,
         area: Rect,
     ) -> bool {
-        let area = centered_rect(area, 97, 94);
+        let area = centered_absolute_rect(area, area.width - 6, area.height - 4);
         if position.offset_x + area.width - 4 > buffer_to_render.area().width {
             return true;
         }
@@ -24,7 +24,7 @@ impl ScrollView {
     }
 
     pub fn inner_buffer_bounding_box(area: Rect) -> (u16, u16) {
-        let area = centered_rect(area, 97, 94);
+        let area = centered_absolute_rect(area, area.width - 4, area.height - 4);
         (area.width - 4, area.height - 3)
     }
 
@@ -35,7 +35,9 @@ impl ScrollView {
     }
 
     fn render_borders(buffer: &mut Buffer, area: Rect) -> Rect {
-        let b = Block::default().borders(Borders::ALL);
+        let b = Block::default()
+            .borders(Borders::ALL)
+            .style(Style::default().fg(from(COLOR_ORANGE).unwrap_or(Color::White)));
 
         b.render(area, buffer);
 
@@ -59,22 +61,22 @@ impl ScrollView {
                 || i == scrollbar_x_end - 4
             {
                 buffer[(i, scrollbar_y_end - 1)] = Cell::new("█")
-                    .set_style(Style::default().fg(Color::White))
+                    .set_style(Style::default().fg(from(COLOR_ORANGE).unwrap_or(Color::Yellow)))
                     .clone();
             } else {
                 buffer[(i, scrollbar_y_end - 1)] = Cell::new("━")
-                    .set_style(Style::default().fg(Color::White))
+                    .set_style(Style::default().fg(from(COLOR_WHITE).unwrap_or(Color::White)))
                     .clone();
             }
         }
         for i in scrollbar_y_start..scrollbar_y_end - 1 {
             if i == scrollbar_y_start || i == scrollbar_y_end - 2 {
                 buffer[(scrollbar_x_end - 2, i)] = Cell::new("██")
-                    .set_style(Style::default().fg(Color::White))
+                    .set_style(Style::default().fg(from(COLOR_ORANGE).unwrap_or(Color::Yellow)))
                     .clone();
             } else {
                 buffer[(scrollbar_x_end - 2, i)] = Cell::new("▕▏")
-                    .set_style(Style::default().fg(Color::White))
+                    .set_style(Style::default().fg(from(COLOR_WHITE).unwrap_or(Color::White)))
                     .clone();
             }
         }
@@ -101,7 +103,7 @@ impl ScrollView {
 
             for i in scrollbar_x_position_start as u16..scrollbar_x_position_end as u16 {
                 buffer[(i, scrollbar_y_end - 1)] = Cell::new("▒")
-                    .set_style(Style::default().fg(Color::Yellow))
+                    .set_style(Style::default().fg(from(COLOR_ORANGE).unwrap_or(Color::Yellow)))
                     .clone();
             }
         }
@@ -116,14 +118,14 @@ impl ScrollView {
 
             for i in scrollbar_y_position_start as u16..scrollbar_y_position_end as u16 {
                 buffer[(scrollbar_x_end - 2, i)] = Cell::new("▒▒")
-                    .set_style(Style::default().fg(Color::Yellow))
+                    .set_style(Style::default().fg(from(COLOR_ORANGE).unwrap_or(Color::Yellow)))
                     .clone();
             }
         }
 
         let bottom_right_corner = "  ";
         buffer[(scrollbar_x_end - 2, scrollbar_y_end - 1)] = Cell::new(bottom_right_corner)
-            .set_style(Style::default().fg(Color::Yellow))
+            .set_style(Style::default().fg(Color::Reset))
             .clone();
 
         Rect::new(

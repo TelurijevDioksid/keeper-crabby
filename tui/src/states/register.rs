@@ -1,32 +1,43 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    text::{Line, Span},
-    widgets::{Block, Paragraph},
     Frame,
 };
 
 use krab_backend::user::{RecordOperationConfig, User};
 
 use crate::{
+    centered_absolute_rect,
+    components::{
+        button::{Button, ButtonConfig},
+        input::{Input, InputConfig},
+    },
     popups::{
         insert_domain_password::{InsertDomainPassword, InsertDomainPasswordExitState},
         message::MessagePopup,
         Popup,
     },
-    Application,
-    {
-        centered_rect,
-        states::{startup::StartUp, ScreenState},
-        State,
-    },
+    states::{startup::StartUp, ScreenState},
+    Application, State,
 };
 
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+enum RegisterInput {
+    Username,
+    MasterPassword,
+    ConfirmMasterPassword,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum RegisterButton {
+    Confirm,
+    Quit,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum RegisterState {
+enum RegisterState {
     Username,
     MasterPassword,
     ConfirmMasterPassword,
@@ -36,17 +47,22 @@ pub enum RegisterState {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Register {
-    pub username: String,
-    pub master_password: String,
-    pub confirm_master_password: String,
-    pub state: RegisterState,
-    pub domain: String,
-    pub password: String,
-    pub path: PathBuf,
+    username: String,
+    master_password: String,
+    confirm_master_password: String,
+    state: RegisterState,
+    domain: String,
+    password: String,
+    path: PathBuf,
+    cursors: HashMap<RegisterInput, u16>,
 }
 
 impl Register {
     pub fn new(path: &PathBuf) -> Self {
+        let mut cursors = HashMap::new();
+        cursors.insert(RegisterInput::Username, 0);
+        cursors.insert(RegisterInput::MasterPassword, 0);
+        cursors.insert(RegisterInput::ConfirmMasterPassword, 0);
         Register {
             username: String::new(),
             master_password: String::new(),
@@ -55,103 +71,103 @@ impl Register {
             domain: String::new(),
             password: String::new(),
             path: path.clone(),
+            cursors,
         }
     }
 
-    pub fn username_append(&mut self, c: char) {
-        self.username.push(c);
+    fn generate_input_config(&self, input: RegisterInput) -> InputConfig {
+        match input {
+            RegisterInput::Username => InputConfig::new(
+                self.state == RegisterState::Username,
+                self.username.clone(),
+                false,
+                "Username".to_string(),
+                if self.state == RegisterState::Username {
+                    Some(self.cursors.get(&RegisterInput::Username).unwrap().clone())
+                } else {
+                    None
+                },
+            ),
+            RegisterInput::MasterPassword => InputConfig::new(
+                self.state == RegisterState::MasterPassword,
+                self.master_password.clone(),
+                true,
+                "Master Password".to_string(),
+                if self.state == RegisterState::MasterPassword {
+                    Some(
+                        self.cursors
+                            .get(&RegisterInput::MasterPassword)
+                            .unwrap()
+                            .clone(),
+                    )
+                } else {
+                    None
+                },
+            ),
+            RegisterInput::ConfirmMasterPassword => InputConfig::new(
+                self.state == RegisterState::ConfirmMasterPassword,
+                self.confirm_master_password.clone(),
+                true,
+                "Confirm Master Password".to_string(),
+                if self.state == RegisterState::ConfirmMasterPassword {
+                    Some(
+                        self.cursors
+                            .get(&RegisterInput::ConfirmMasterPassword)
+                            .unwrap()
+                            .clone(),
+                    )
+                } else {
+                    None
+                },
+            ),
+        }
     }
 
-    pub fn master_password_append(&mut self, c: char) {
-        self.master_password.push(c);
-    }
-
-    pub fn confirm_master_password_append(&mut self, c: char) {
-        self.confirm_master_password.push(c);
-    }
-
-    pub fn username_pop(&mut self) {
-        self.username.pop();
-    }
-
-    pub fn master_password_pop(&mut self) {
-        self.master_password.pop();
-    }
-
-    pub fn confirm_master_password_pop(&mut self) {
-        self.confirm_master_password.pop();
+    fn generate_button_config(&self, button: RegisterButton) -> ButtonConfig {
+        match button {
+            RegisterButton::Confirm => {
+                ButtonConfig::new(self.state == RegisterState::Confirm, "Confirm".to_string())
+            }
+            RegisterButton::Quit => {
+                ButtonConfig::new(self.state == RegisterState::Quit, "Quit".to_string())
+            }
+        }
     }
 }
 
 impl State for Register {
     fn render(&self, f: &mut Frame, _app: &Application, rect: Rect) {
-        // need to create input widget
-        // this is a temporary solution
-        let rect = centered_rect(rect, 50, 40);
+        let height = 3 * InputConfig::height() + ButtonConfig::height();
+        let width = InputConfig::width();
+        let rect = centered_absolute_rect(rect, width, height);
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![
-                Constraint::Length(5),
-                Constraint::Length(5),
-                Constraint::Length(5),
-                Constraint::Length(5),
+                Constraint::Length(InputConfig::height()),
+                Constraint::Length(InputConfig::height()),
+                Constraint::Length(InputConfig::height()),
+                Constraint::Length(ButtonConfig::height()),
             ])
             .split(rect);
-
-        let text = vec![Line::from(vec![Span::raw(self.username.clone())])];
-        let username_p =
-            Paragraph::new(text).block(Block::bordered().title("Username").border_style(
-                Style::default().fg(match self.state {
-                    RegisterState::Username => Color::White,
-                    _ => Color::DarkGray,
-                }),
-            ));
-
-        let text = vec![Line::from(vec![Span::raw(self.master_password.clone())])];
-        let master_password_p =
-            Paragraph::new(text).block(Block::bordered().title("Master Password").border_style(
-                Style::default().fg(match self.state {
-                    RegisterState::MasterPassword => Color::White,
-                    _ => Color::DarkGray,
-                }),
-            ));
-
-        let text = vec![Line::from(vec![Span::raw(
-            self.confirm_master_password.clone(),
-        )])];
-        let confirm_master_password_p = Paragraph::new(text).block(
-            Block::bordered()
-                .title("Confirm Master Password")
-                .border_style(Style::default().fg(match self.state {
-                    RegisterState::ConfirmMasterPassword => Color::White,
-                    _ => Color::DarkGray,
-                })),
-        );
 
         let inner_layout = Layout::default()
             .direction(Direction::Horizontal)
             .constraints(vec![Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)])
             .split(layout[3]);
 
-        let quit_p = Paragraph::new(Span::raw("Quit")).block(Block::bordered().border_style(
-            Style::default().fg(match self.state {
-                RegisterState::Quit => Color::White,
-                _ => Color::DarkGray,
-            }),
-        ));
+        let username_config = self.generate_input_config(RegisterInput::Username);
+        let master_password_config = self.generate_input_config(RegisterInput::MasterPassword);
+        let confirm_master_password_config =
+            self.generate_input_config(RegisterInput::ConfirmMasterPassword);
+        let confirm_config = self.generate_button_config(RegisterButton::Confirm);
+        let quit_config = self.generate_button_config(RegisterButton::Quit);
+        let mut buffer = f.buffer_mut();
 
-        let register_p = Paragraph::new(Span::raw("Confirm")).block(
-            Block::bordered().border_style(Style::default().fg(match self.state {
-                RegisterState::Confirm => Color::White,
-                _ => Color::DarkGray,
-            })),
-        );
-
-        f.render_widget(username_p, layout[0]);
-        f.render_widget(master_password_p, layout[1]);
-        f.render_widget(confirm_master_password_p, layout[2]);
-        f.render_widget(quit_p, inner_layout[0]);
-        f.render_widget(register_p, inner_layout[1]);
+        Input::render(&mut buffer, layout[0], &username_config);
+        Input::render(&mut buffer, layout[1], &master_password_config);
+        Input::render(&mut buffer, layout[2], &confirm_master_password_config);
+        Button::render(&mut buffer, inner_layout[0], &quit_config);
+        Button::render(&mut buffer, inner_layout[1], &confirm_config);
     }
 
     fn handle_key(&mut self, key: &KeyEvent, app: &Application) -> Application {
@@ -160,49 +176,52 @@ impl State for Register {
 
         match self.state {
             RegisterState::Username => match key.code {
-                KeyCode::Char(c) => {
-                    self.username_append(c);
-                }
-                KeyCode::Backspace => {
-                    self.username_pop();
-                }
                 KeyCode::Enter | KeyCode::Tab | KeyCode::Down => {
                     self.state = RegisterState::MasterPassword;
                 }
                 KeyCode::Up => {
                     self.state = RegisterState::Confirm;
                 }
-                _ => {}
+                _ => {
+                    let config = self.generate_input_config(RegisterInput::Username);
+                    let (value, cursor_position) =
+                        Input::handle_key(key, &config, self.username.clone());
+                    self.username = value;
+                    self.cursors
+                        .insert(RegisterInput::Username, cursor_position);
+                }
             },
             RegisterState::MasterPassword => match key.code {
-                KeyCode::Char(c) => {
-                    self.master_password_append(c);
-                }
-                KeyCode::Backspace => {
-                    self.master_password_pop();
-                }
                 KeyCode::Enter | KeyCode::Tab | KeyCode::Down => {
                     self.state = RegisterState::ConfirmMasterPassword;
                 }
                 KeyCode::Up => {
                     self.state = RegisterState::Username;
                 }
-                _ => {}
+                _ => {
+                    let config = self.generate_input_config(RegisterInput::MasterPassword);
+                    let (value, cursor_position) =
+                        Input::handle_key(key, &config, self.master_password.clone());
+                    self.master_password = value;
+                    self.cursors
+                        .insert(RegisterInput::MasterPassword, cursor_position);
+                }
             },
             RegisterState::ConfirmMasterPassword => match key.code {
-                KeyCode::Char(c) => {
-                    self.confirm_master_password_append(c);
-                }
-                KeyCode::Backspace => {
-                    self.confirm_master_password_pop();
-                }
                 KeyCode::Enter | KeyCode::Tab | KeyCode::Down => {
                     self.state = RegisterState::Quit;
                 }
                 KeyCode::Up => {
                     self.state = RegisterState::MasterPassword;
                 }
-                _ => {}
+                _ => {
+                    let config = self.generate_input_config(RegisterInput::ConfirmMasterPassword);
+                    let (value, cursor_position) =
+                        Input::handle_key(key, &config, self.confirm_master_password.clone());
+                    self.confirm_master_password = value;
+                    self.cursors
+                        .insert(RegisterInput::ConfirmMasterPassword, cursor_position);
+                }
             },
             RegisterState::Quit => match key.code {
                 KeyCode::Enter => {
@@ -288,9 +307,6 @@ impl State for Register {
             &password,
             &self.path,
         );
-
-        // first need to validate config
-        // match config.validate() ...
 
         let res = User::new(&config);
 

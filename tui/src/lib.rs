@@ -8,6 +8,7 @@ use ratatui::{
         terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     },
     layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Style},
     widgets::{Block, Borders},
     Frame, Terminal,
 };
@@ -21,15 +22,33 @@ pub mod components;
 pub mod popups;
 pub mod states;
 
-pub fn ui(f: &mut Frame, app: &Application) {
+const COLOR_BLACK: &str = "#503D2D";
+const COLOR_CYAN: &str = "#1F9295";
+const COLOR_WHITE: &str = "#F0ECC9";
+const COLOR_ORANGE: &str = "#E3AD43";
+const COLOR_RED: &str = "#D44C1A";
+
+pub fn from(hex: &str) -> Result<Color, String> {
+    let hex = hex.trim_start_matches('#');
+    let try_r = u8::from_str_radix(&hex[0..2], 16);
+    let try_g = u8::from_str_radix(&hex[2..4], 16);
+    let try_b = u8::from_str_radix(&hex[4..6], 16);
+    if try_r.is_err() || try_g.is_err() || try_b.is_err() {
+        return Err("Invalid color".to_string());
+    }
+    Ok(Color::Rgb(try_r.unwrap(), try_g.unwrap(), try_b.unwrap()))
+}
+
+fn ui(f: &mut Frame, app: &Application) {
     let wrapper = Rect::new(0, 0, f.area().width, f.area().height);
     f.render_widget(
         Block::default()
             .borders(Borders::ALL)
-            .title(app.immutable_app_state.name.clone()),
+            .title(" ".to_string() + &app.immutable_app_state.name + " ")
+            .style(Style::default().fg(from(COLOR_ORANGE).unwrap_or(Color::Yellow))),
         wrapper,
     );
-    let rect = centered_rect(f.area(), 97, 94);
+    let rect = centered_absolute_rect(wrapper, f.area().width - 6, f.area().height - 4);
     match &app.state {
         ScreenState::Login(s) => s.render(f, app, rect),
         ScreenState::StartUp(s) => {
@@ -135,6 +154,26 @@ fn centered_rect(r: Rect, percent_x: u16, percent_y: u16) -> Rect {
             Constraint::Percentage((100 - percent_x) / 2),
             Constraint::Percentage(percent_x),
             Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
+}
+
+fn centered_absolute_rect(r: Rect, width: u16, height: u16) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length((r.height - height) / 2),
+            Constraint::Length(height),
+            Constraint::Length((r.height - height) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Length((r.width - width) / 2),
+            Constraint::Length(width),
+            Constraint::Length((r.width - width) / 2),
         ])
         .split(popup_layout[1])[1]
 }

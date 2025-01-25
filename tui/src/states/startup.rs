@@ -1,20 +1,28 @@
 use ratatui::{
     crossterm::event::{KeyCode, KeyEvent},
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Style, Stylize},
-    text::Line,
-    widgets::{Block, Padding, Paragraph},
+    layout::{Constraint, Direction, Layout, Rect},
     Frame,
 };
 
 use crate::{
-    centered_rect,
+    centered_absolute_rect,
+    components::{
+        button::{Button, ButtonConfig},
+        input::InputConfig,
+    },
     states::{login::Login, register::Register, ScreenState, State},
     Application,
 };
 
-#[derive(Clone)]
-pub enum StartUpState {
+#[derive(Clone, PartialEq)]
+enum StartUpState {
+    Login,
+    Register,
+    Quit,
+}
+
+#[derive(Debug, Clone)]
+enum StartUpButton {
     Login,
     Register,
     Quit,
@@ -22,7 +30,7 @@ pub enum StartUpState {
 
 #[derive(Clone)]
 pub struct StartUp {
-    pub state: StartUpState,
+    state: StartUpState,
 }
 
 impl StartUp {
@@ -31,62 +39,44 @@ impl StartUp {
             state: StartUpState::Login,
         }
     }
+
+    fn generate_button_config(&self, button: StartUpButton) -> ButtonConfig {
+        match button {
+            StartUpButton::Login => {
+                ButtonConfig::new(self.state == StartUpState::Login, "Login".to_string())
+            }
+            StartUpButton::Register => {
+                ButtonConfig::new(self.state == StartUpState::Register, "Register".to_string())
+            }
+            StartUpButton::Quit => {
+                ButtonConfig::new(self.state == StartUpState::Quit, "Quit".to_string())
+            }
+        }
+    }
 }
 
 impl State for StartUp {
     fn render(&self, f: &mut Frame, _app: &Application, rect: Rect) {
-        let rect = centered_rect(rect, 50, 40);
+        let height = 3 * ButtonConfig::height();
+        let width = InputConfig::width();
+        let rect = centered_absolute_rect(rect, width, height);
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints(vec![
-                Constraint::Length(5),
-                Constraint::Length(5),
-                Constraint::Length(5),
+                Constraint::Length(ButtonConfig::height()),
+                Constraint::Length(ButtonConfig::height()),
+                Constraint::Length(ButtonConfig::height()),
             ])
             .split(rect);
 
-        let text = vec![Line::from(vec!["Login".into()])];
-        let login_p = Paragraph::new(text)
-            .block(
-                Block::bordered()
-                    .border_style(Style::default().fg(match self.state {
-                        StartUpState::Login => Color::White,
-                        _ => Color::DarkGray,
-                    }))
-                    .padding(Padding::new(1, 0, layout[0].height / 4, 0)),
-            )
-            .style(Style::new().white())
-            .alignment(Alignment::Left);
+        let login_config = self.generate_button_config(StartUpButton::Login);
+        let register_config = self.generate_button_config(StartUpButton::Register);
+        let quit_config = self.generate_button_config(StartUpButton::Quit);
+        let mut buffer = f.buffer_mut();
 
-        let text = vec![Line::from(vec!["Register".into()])];
-        let register_p = Paragraph::new(text)
-            .block(
-                Block::bordered()
-                    .border_style(Style::default().fg(match self.state {
-                        StartUpState::Register => Color::White,
-                        _ => Color::DarkGray,
-                    }))
-                    .padding(Padding::new(1, 0, layout[1].height / 4, 0)),
-            )
-            .style(Style::new().white())
-            .alignment(Alignment::Left);
-
-        let text = vec![Line::from(vec!["Quit".into()])];
-        let quit_p = Paragraph::new(text)
-            .block(
-                Block::bordered()
-                    .border_style(Style::default().fg(match self.state {
-                        StartUpState::Quit => Color::White,
-                        _ => Color::DarkGray,
-                    }))
-                    .padding(Padding::new(1, 0, layout[2].height / 4, 0)),
-            )
-            .style(Style::new().white())
-            .alignment(Alignment::Left);
-
-        f.render_widget(login_p, layout[0]);
-        f.render_widget(register_p, layout[1]);
-        f.render_widget(quit_p, layout[2]);
+        Button::render(&mut buffer, layout[0], &login_config);
+        Button::render(&mut buffer, layout[1], &register_config);
+        Button::render(&mut buffer, layout[2], &quit_config);
     }
 
     fn handle_key(&mut self, key: &KeyEvent, app: &Application) -> Application {

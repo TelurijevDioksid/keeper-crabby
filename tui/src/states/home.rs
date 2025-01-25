@@ -12,6 +12,7 @@ use krab_backend::user::{ReadOnlyRecords, RecordOperationConfig, User};
 
 use crate::{
     components::scrollable_view::ScrollView,
+    from,
     popups::{
         insert_domain_password::{InsertDomainPassword, InsertDomainPasswordExitState},
         insert_master::{InsertMaster, InsertMasterExitState},
@@ -19,11 +20,9 @@ use crate::{
         Popup,
     },
     states::{login::Login, State},
-    Application, ScreenState,
+    Application, ScreenState, COLOR_BLACK, COLOR_ORANGE, COLOR_WHITE,
 };
 
-const SELECTED_DOMAIN_PASSWORD_BG_COLOR: Color = Color::Rgb(202, 220, 252);
-const SELECTED_DOMAIN_PASSWORD_FG_COLOR: Color = Color::Rgb(0, 36, 107);
 const DOMAIN_PASSWORD_LIST_ITEM_HEIGHT: u16 = 4;
 const RIGHT_MARGIN: u16 = 6;
 const LEFT_PADDING: u16 = 2;
@@ -183,7 +182,10 @@ impl Home {
         for _ in 0..width {
             separator.push_str("╍");
         }
-        Text::styled(separator, Style::default().fg(Color::White))
+        Text::styled(
+            separator,
+            Style::default().fg(from(COLOR_ORANGE).unwrap_or(Color::Yellow)),
+        )
     }
 
     fn current_secret_cursor(&self, height: u16, width: u16, index: u16, style: Style) -> Text {
@@ -222,10 +224,10 @@ impl Home {
         for (key, value) in self.secrets.secrets.iter() {
             let style = if self.secrets.selected_secret == index {
                 Style::default()
-                    .bg(SELECTED_DOMAIN_PASSWORD_BG_COLOR)
-                    .fg(SELECTED_DOMAIN_PASSWORD_FG_COLOR)
+                    .bg(from(COLOR_WHITE).unwrap_or(Color::White))
+                    .fg(from(COLOR_BLACK).unwrap_or(Color::Black))
             } else {
-                Style::default()
+                Style::default().fg(from(COLOR_WHITE).unwrap_or(Color::White))
             };
             let cursor = self.current_secret_cursor(3, cursor_offset, index as u16, style);
             let width = self.width();
@@ -255,7 +257,10 @@ impl Home {
     fn render_legend(&self, buffer: &mut Buffer, area: Rect, cursor_offset: u16) -> u16 {
         let text = " ".repeat(cursor_offset as usize) + 
             "j - down | k - up | h - left | l - right | q - quit | a - add | d - delete selected | e - edit selected | c - copy selected";
-        let legend = Text::styled(text, Style::default().fg(Color::White));
+        let legend = Text::styled(
+            text,
+            Style::default().fg(from(COLOR_WHITE).unwrap_or(Color::White)),
+        );
         legend.render(Rect::new(0, 0, area.width, 1), buffer);
 
         let separator = self.separator(buffer.area().width);
