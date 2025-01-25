@@ -12,4 +12,4 @@ As of now the only way to use krab is to build it from source.
   make build
 ```
 
-Make sure to add the repo to your PATH variable. Then use the application with ```krab```.
+Make sure to add the repo to your PATH variable. Then use the application with ```krab``` command.
