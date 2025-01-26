@@ -9,12 +9,47 @@ use crate::{append_to_file, clear_file_content, create_file, hash, write_to_file
 
 pub use super::models::RecordOperationConfig;
 
+/// User
+/// Data about a user is not exposed to the outside world
+/// Only methods to interact with the user data are exposed
+///
+/// # Fields
+/// * `0` - The records
+/// * `1` - The path to the user data
+/// * `2` - The username
+#[derive(Debug, Clone, PartialEq)]
+pub struct User(Vec<Record>, PathBuf, Username);
+
+/// ReadOnlyRecords is a read-only version of the records
+/// It is used to return records to the user
+/// The user can only read the records and not modify them
+/// This is to prevent the user from modifying the records directly
+/// and to ensure that the records are always encrypted
+///
+/// # Fields
+/// * `0` - Vector of domain-password pairs
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReadOnlyRecords(Vec<(String, String)>);
+
+/// A domain-password pair
+///
+/// # Fields
+///
+/// * `domain` - The domain
+/// * `password` - The password
 #[derive(Debug, Clone, PartialEq)]
 struct DomainPasswordPair {
     domain: String,
     password: String,
 }
 
+/// CipherConfig is a configuration for the cipher
+///
+/// # Fields
+/// * `key` - The key
+/// * `salt` - The salt
+/// * `nonce` - The nonce
+/// * `ciphertext` - The ciphertext
 #[derive(Debug, Clone, PartialEq)]
 struct CipherConfig {
     key: Key<Aes128GcmSiv>,
@@ -23,28 +58,46 @@ struct CipherConfig {
     ciphertext: Vec<u8>,
 }
 
+/// DerivedKey is a derived key from a master password
+///
+/// # Fields
+/// * `key` - The key
+/// * `salt` - The salt
 #[derive(Debug, Clone, PartialEq)]
 struct DerivedKey {
     pub key: [u8; 16],
     pub salt: Vec<u8>,
 }
 
+/// Record represents an encrypted domain-password pair
+///
+/// # Fields
+/// * `cypher` - The cipher configuration
+/// * `offset` - The offset in the file
 #[derive(Debug, Clone, PartialEq)]
 struct Record {
     cypher: CipherConfig,
     offset: u32,
 }
 
+/// Username represents the username of a user
+///
+/// # Fields
+/// * `0` - The username
 #[derive(Debug, Clone, PartialEq)]
 struct Username(String);
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct User(Vec<Record>, PathBuf, Username);
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ReadOnlyRecords(Vec<(String, String)>);
-
 impl CipherConfig {
+    /// Creates a new `CipherConfig`
+    ///
+    /// # Arguments
+    /// * `key` - The key
+    /// * `salt` - The salt
+    /// * `nonce` - The nonce
+    /// * `ciphertext` - The ciphertext
+    ///
+    /// # Returns
+    /// A new `CipherConfig`
     fn new(
         key: Key<Aes128GcmSiv>,
         salt: Vec<u8>,
@@ -59,6 +112,16 @@ impl CipherConfig {
         }
     }
 
+    /// Marshals the domain and password into a string
+    /// escaping spaces and backslashes in the process
+    /// Domain and password are separated by a space after escaping
+    ///
+    /// # Arguments
+    /// * `domain` - The domain
+    /// * `password` - The password
+    ///
+    /// # Returns
+    /// The marshalled string
     fn marshal(domain: &str, password: &str) -> String {
         let marshal_domain = domain.to_string().replace("\\", "\\\\").replace(" ", "\\s");
         let marshal_password = password
@@ -68,6 +131,14 @@ impl CipherConfig {
         format!("{} {}", marshal_domain, marshal_password)
     }
 
+    /// Unmarshals the domain and password from a string
+    /// unescaping spaces and backslashes in the process
+    ///
+    /// # Arguments
+    /// * `data` - The data to unmarshal
+    ///
+    /// # Returns
+    /// A tuple of the domain and password
     fn unmarshal(data: &str) -> (String, String) {
         let parts: Vec<&str> = data.split_whitespace().collect();
         let domain = parts[0].replace("\\s", " ").replace("\\\\", "\\");
@@ -75,6 +146,10 @@ impl CipherConfig {
         (domain, password)
     }
 
+    /// Writes the cipher configuration to a buffer modifying the buffer
+    ///
+    /// # Arguments
+    /// * `buffer` - The buffer to write to
     fn write(&self, buffer: &mut Vec<u8>) {
         // this is needed to get the length of the ciphertext
         // so that we can read it back from the file
@@ -88,6 +163,15 @@ impl CipherConfig {
         buffer.append(&mut data);
     }
 
+    /// Encrypts the domain and password using the master password
+    ///
+    /// # Arguments
+    /// * `domain` - The domain
+    /// * `password` - The password
+    /// * `master_password` - The master password
+    ///
+    /// # Returns
+    /// A new `CipherConfig` or an error
     fn encrypt_data(
         domain: &str,
         password: &str,
@@ -104,22 +188,41 @@ impl CipherConfig {
         Ok(CipherConfig::new(key, salt, nonce, ciphertext))
     }
 
+    /// Decrypts the domain and password
+    ///
+    /// # Returns
+    /// A new `DomainPasswordPair` or an error if decryption fails
     fn decrypt_data(&self) -> Result<DomainPasswordPair, aead::Error> {
         let cipher = Aes128GcmSiv::new(&self.key);
         let plaintext = cipher.decrypt(&self.nonce, self.ciphertext.as_ref())?;
         let (domain, password) = CipherConfig::unmarshal(str::from_utf8(&plaintext).unwrap());
-        Ok(DomainPasswordPair {
-            domain,
-            password: password,
-        })
+        Ok(DomainPasswordPair { domain, password })
     }
 }
 
 impl DerivedKey {
+    /// Creates a new `DerivedKey`
+    ///
+    /// # Arguments
+    /// * `key` - The key
+    /// * `salt` - The salt
+    ///
+    /// # Returns
+    /// A new `DerivedKey`
     fn new(key: [u8; 16], salt: Vec<u8>) -> Self {
         DerivedKey { key, salt }
     }
 
+    /// Derives a key from a master password
+    /// If a salt is provided, it means that the key is being derived
+    /// from an existing salt. If salt is None, a new salt is generated
+    ///
+    /// # Arguments
+    /// * `data` - The data to derive the key from
+    /// * `salt` - The salt
+    ///
+    /// # Returns
+    /// A new `DerivedKey`
     fn derive_key(data: &str, salt: Option<Vec<u8>>) -> Self {
         let salt = match salt {
             Some(salt) => salt,
@@ -137,15 +240,34 @@ impl DerivedKey {
             &mut derived_key,
         )
         .unwrap();
+
         DerivedKey::new(derived_key, salt_copy)
     }
 }
 
 impl Record {
+    /// Creates a new `Record`
+    ///
+    /// # Arguments
+    /// * `cypher` - The cipher configuration
+    /// * `offset` - The offset
+    ///
+    /// # Returns
+    /// A new `Record`
     fn new(cypher: CipherConfig, offset: u32) -> Self {
         Record { cypher, offset }
     }
 
+    /// Reads a record from bytes and returns the record,
+    /// the remaining bytes and the current offset
+    ///
+    /// # Arguments
+    /// * `bytes` - The bytes to read from
+    /// * `master_password` - The master password
+    /// * `offset` - The offset
+    ///
+    /// # Returns
+    /// A tuple of the record, the remaining bytes and the current offset
     fn read_from_bytes(
         bytes: Vec<u8>,
         master_password: &str,
@@ -159,6 +281,7 @@ impl Record {
         let key = Key::<Aes128GcmSiv>::clone_from_slice(&derived_key.key);
         let cipher_config = CipherConfig::new(key, salt, nonce, ciphertext);
         let current_offset = 38 + ciphertext_len as usize + offset as usize;
+
         Ok((
             Record::new(cipher_config, offset),
             bytes[(38 + ciphertext_len as usize)..].to_vec(),
@@ -204,12 +327,26 @@ impl Record {
         Ok(data)
     }
 
+    /// Decrypts the data
+    ///
+    /// # Returns
+    /// The decrypted data or an error if decryption fails
     fn data(&self) -> Result<DomainPasswordPair, aead::Error> {
         self.cypher.decrypt_data()
     }
 }
 
 impl User {
+    /// Creates a new `User` instance
+    /// Does not create a new user in the file system
+    ///
+    /// # Arguments
+    /// * `path` - The path to the user data
+    /// * `username` - The username
+    /// * `master_password` - The master password
+    ///
+    /// # Returns
+    /// A new `User` and `ReadOnlyRecords` or an error message
     pub fn from(
         path: &PathBuf,
         username: &str,
@@ -241,6 +378,13 @@ impl User {
         ))
     }
 
+    /// Creates a new user and writes the user data to the file system
+    ///
+    /// # Arguments
+    /// * `user` - The user configuration
+    ///
+    /// # Returns
+    /// An error message if the user could not be created
     pub fn new(user: &RecordOperationConfig) -> Result<(), String> {
         let hashed_username = hash(user.username.to_string());
         let res = create_file(&user.path, hashed_username.as_str());
@@ -263,10 +407,30 @@ impl User {
         }
     }
 
+    /// Returns the username of the user
+    ///
+    /// # Returns
+    /// The username
     pub fn username(&self) -> String {
         self.2.clone().0
     }
 
+    /// Returns the path to the user data
+    ///
+    /// # Returns
+    /// The path to the user data
+    fn path(&self) -> PathBuf {
+        self.1.clone()
+    }
+
+    /// Adds a new record to the user data
+    /// The record is encrypted before being added
+    ///
+    /// # Arguments
+    /// * `record` - The record configuration
+    ///
+    /// # Returns
+    /// The read-only records or an error message
     pub fn add_record(&mut self, record: RecordOperationConfig) -> Result<ReadOnlyRecords, String> {
         let (integrity, ro_records) =
             self.check_integrity(&record.username, &record.master_password, &record.path);
@@ -302,6 +466,14 @@ impl User {
         Ok(ro_records)
     }
 
+    /// Removes a record from the user data
+    /// The record is removed by domain
+    ///
+    /// # Arguments
+    /// * `record` - The record configuration
+    ///
+    /// # Returns
+    /// The read-only records or an error message
     pub fn remove_record(
         &mut self,
         record: RecordOperationConfig,
@@ -354,6 +526,14 @@ impl User {
         Ok(ro_records)
     }
 
+    /// Modifies a record in the user data
+    /// The record is modified by domain
+    ///
+    /// # Arguments
+    /// * `record` - The record configuration
+    ///
+    /// # Returns
+    /// The read-only records or an error message
     pub fn modify_record(
         &mut self,
         record: RecordOperationConfig,
@@ -414,10 +594,10 @@ impl User {
         Ok(ro_records)
     }
 
-    fn path(&self) -> PathBuf {
-        self.1.clone()
-    }
-
+    /// Returns the last offset in the file
+    ///
+    /// # Returns
+    /// The last offset
     fn last_offset(&self) -> u32 {
         let mut offset = 0;
         for record in self.0.iter() {
@@ -429,6 +609,17 @@ impl User {
         offset
     }
 
+    /// Checks the integrity of the user data
+    /// The integrity is checked by decrypting the data
+    /// If the data cannot be decrypted, the integrity check fails
+    ///
+    /// # Arguments
+    /// * `username` - The username of the user
+    /// * `master_password` - The master password of the user
+    /// * `path` - The path to the user data
+    ///
+    /// # Returns
+    /// A tuple of the integrity status and the read-only records if the integrity check passes
     fn check_integrity(
         &self,
         username: &str,
@@ -458,6 +649,10 @@ impl User {
         }
     }
 
+    /// Removes all records from the file
+    ///
+    /// # Returns
+    /// Nothing, panics if the records could not be removed (TODO: handle error)
     fn remove_records_from_file(&mut self) {
         let path = self.path();
         match clear_file_content(&path) {
@@ -468,14 +663,28 @@ impl User {
 }
 
 impl ReadOnlyRecords {
+    /// Returns the records
+    ///
+    /// # Returns
+    /// A vector of domain-password pairs
     pub fn records(&self) -> Vec<(String, String)> {
         self.0.clone()
     }
 
+    /// Adds a new record to the read-only records
+    ///
+    /// # Arguments
+    /// * `domain` - The domain
+    /// * `password` - The password
     fn add_record(&mut self, domain: &String, password: &String) {
         self.0.push((domain.clone(), password.clone()));
     }
 
+    /// Removes a record from the read-only records
+    /// The record is removed by domain
+    ///
+    /// # Arguments
+    /// * `domain` - The domain
     fn remove_record(&mut self, domain: &String) {
         let mut new_records = vec![];
         for record in self.0.iter() {

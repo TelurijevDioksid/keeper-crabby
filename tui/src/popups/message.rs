@@ -12,12 +12,29 @@ use crate::{
     Application,
 };
 
+/// Represents the message popup
+///
+/// # Fields
+/// * `message` - The message
+///
+/// # Methods
+/// * `new` - Creates a new `MessagePopup`
+///
+/// # Implements
+/// * `Popup` - The popup trait
 #[derive(Clone)]
 pub struct MessagePopup {
     pub message: String,
 }
 
 impl MessagePopup {
+    /// Creates a new message popup
+    ///
+    /// # Arguments
+    /// * `message` - The message
+    ///
+    /// # Returns
+    /// A new `MessagePopup`
     pub fn new(message: String) -> Self {
         MessagePopup { message }
     }

@@ -19,10 +19,17 @@ use crate::{
         message::MessagePopup,
         Popup,
     },
-    states::{startup::StartUp, ScreenState},
-    Application, State,
+    views::{startup::StartUp, ViewState},
+    Application, View,
 };
 
+/// Represents the register inputs  
+///
+/// # Variants
+///
+/// * `Username` - The username state
+/// * `MasterPassword` - The master password state
+/// * `ConfirmMasterPassword` - The confirm master password state
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 enum RegisterInput {
     Username,
@@ -30,12 +37,25 @@ enum RegisterInput {
     ConfirmMasterPassword,
 }
 
+/// Represents the register buttons
+///
+/// # Variants
+/// * `Confirm` - The confirm button
+/// * `Quit` - The quit button
 #[derive(Debug, Clone, PartialEq)]
 enum RegisterButton {
     Confirm,
     Quit,
 }
 
+/// Represents the register state
+///
+/// # Fields
+/// * `username` - The username
+/// * `master_password` - The master password
+/// * `confirm_master_password` - The confirm master password
+/// * `Confirm` - The confirm state
+/// * `Quit` - The quit state
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum RegisterState {
     Username,
@@ -45,6 +65,25 @@ enum RegisterState {
     Quit,
 }
 
+/// Represents the register state
+///
+/// # Fields
+/// * `username` - The username
+/// * `master_password` - The master password
+/// * `confirm_master_password` - The master password confirmation
+/// * `state` - The state
+/// * `domain` - The domain
+/// * `password` - The password
+/// * `path` - The path
+/// * `cursors` - The cursors
+///
+/// # Methods
+/// * `new` - Creates a new `Register`
+/// * `generate_input_config` - Generates an input configuration
+/// * `generate_button_config` - Generates a button configuration
+///
+/// # Implements
+/// * `View` - The view trait
 #[derive(Debug, Clone, PartialEq)]
 pub struct Register {
     username: String,
@@ -58,6 +97,13 @@ pub struct Register {
 }
 
 impl Register {
+    /// Creates a new register view
+    ///
+    /// # Arguments
+    /// * `path` - The path
+    ///
+    /// # Returns
+    /// A new `Register`
     pub fn new(path: &PathBuf) -> Self {
         let mut cursors = HashMap::new();
         cursors.insert(RegisterInput::Username, 0);
@@ -75,6 +121,13 @@ impl Register {
         }
     }
 
+    /// Generates an input configuration
+    ///
+    /// # Arguments
+    /// * `input` - The input
+    ///
+    /// # Returns
+    /// An input configuration
     fn generate_input_config(&self, input: RegisterInput) -> InputConfig {
         match input {
             RegisterInput::Username => InputConfig::new(
@@ -123,6 +176,13 @@ impl Register {
         }
     }
 
+    /// Generates a button configuration
+    ///
+    /// # Arguments
+    /// * `button` - The button
+    ///
+    /// # Returns
+    /// A button configuration
     fn generate_button_config(&self, button: RegisterButton) -> ButtonConfig {
         match button {
             RegisterButton::Confirm => {
@@ -135,7 +195,7 @@ impl Register {
     }
 }
 
-impl State for Register {
+impl View for Register {
     fn render(&self, f: &mut Frame, _app: &Application, rect: Rect) {
         let height = 3 * InputConfig::height() + ButtonConfig::height();
         let width = InputConfig::width();
@@ -225,7 +285,7 @@ impl State for Register {
             },
             RegisterState::Quit => match key.code {
                 KeyCode::Enter => {
-                    app.state = ScreenState::StartUp(StartUp::new());
+                    app.state = ViewState::StartUp(StartUp::new());
                     change_state = true;
                 }
                 KeyCode::Right | KeyCode::Left | KeyCode::Tab => {
@@ -260,7 +320,7 @@ impl State for Register {
         }
 
         if !change_state {
-            app.state = ScreenState::Register(self.clone());
+            app.state = ViewState::Register(self.clone());
         }
 
         app
@@ -312,7 +372,7 @@ impl State for Register {
 
         match res {
             Ok(_) => {
-                app.state = ScreenState::StartUp(StartUp::new());
+                app.state = ViewState::StartUp(StartUp::new());
             }
             Err(_) => {
                 app.mutable_app_state

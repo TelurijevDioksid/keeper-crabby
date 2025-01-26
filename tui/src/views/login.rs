@@ -19,35 +19,68 @@ use crate::{
         input::{Input, InputConfig},
     },
     popups::message::MessagePopup,
-    states::{
+    views::{
         home::{Home, Position},
         startup::StartUp,
-        ScreenState, State,
+        View, ViewState,
     },
     Application,
 };
 
+/// Represents the login inputs
+///
+/// # Variants
+/// * `Username` - The username field
+/// * `MasterPassword` - The master password field
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 enum LoginInput {
     Username,
     MasterPassword,
 }
 
+/// Represents the login buttons
+///
+/// # Variants
+/// * `Confirm` - The confirm button
+/// * `Quit` - The quit button
 #[derive(Debug, Clone, PartialEq)]
 enum LoginButton {
     Confirm,
     Quit,
 }
 
-// TODO: change to private (LoginInnerState)
+/// Represents the login state
+///
+/// # Variants
+/// * `Username` - The username state
+/// * `MasterPassword` - The master password state
+/// * `Confirm` - The confirm state
+/// * `Quit` - The quit state
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum LoginState {
+enum LoginState {
     Username,
     MasterPassword,
     Confirm,
     Quit,
 }
 
+/// Represents the login view
+///
+/// # Fields
+/// * `username` - The username
+/// * `master_password` - The master password
+/// * `state` - The state
+/// * `path` - The path
+/// * `cursors` - The cursors
+///
+/// # Methods
+/// * `new` - Creates a new `Login`
+/// * `login` - Logs in the user
+/// * `generate_input_config` - Generates the input configuration
+/// * `generate_button_config` - Generates the button configuration
+///
+/// # Implements
+/// * `View` - The view trait
 #[derive(Debug, Clone)]
 pub struct Login {
     username: String,
@@ -58,6 +91,13 @@ pub struct Login {
 }
 
 impl Login {
+    /// Creates a new login view
+    ///
+    /// # Arguments
+    /// * `path` - The path
+    ///
+    /// # Returns
+    /// A new `Login` view
     pub fn new(path: &PathBuf) -> Self {
         let mut cursors = HashMap::new();
         cursors.insert(LoginInput::Username, 0);
@@ -71,6 +111,11 @@ impl Login {
         }
     }
 
+    /// Logs in the user
+    ///
+    /// # Returns
+    /// The user and the read only records if the login is successful
+    /// An error message if the login is unsuccessful
     fn login(&self) -> Result<(User, ReadOnlyRecords), String> {
         let user_exists = check_user(&self.username, self.path.clone());
         if !user_exists {
@@ -85,6 +130,13 @@ impl Login {
         }
     }
 
+    /// Generates the input configuration
+    ///
+    /// # Arguments
+    /// * `input` - The input
+    ///
+    /// # Returns
+    /// The input configuration
     fn generate_input_config(&self, input: LoginInput) -> InputConfig {
         match input {
             LoginInput::Username => InputConfig::new(
@@ -117,6 +169,13 @@ impl Login {
         }
     }
 
+    /// Generates the button configuration
+    ///
+    /// # Arguments
+    /// * `button` - The button
+    ///
+    /// # Returns
+    /// The button configuration
     fn generate_button_config(&self, button: LoginButton) -> ButtonConfig {
         match button {
             LoginButton::Confirm => {
@@ -129,7 +188,7 @@ impl Login {
     }
 }
 
-impl State for Login {
+impl View for Login {
     fn render(&self, f: &mut Frame, _app: &Application, rect: Rect) {
         let height = 2 * InputConfig::height() + ButtonConfig::height();
         let width = InputConfig::width();
@@ -198,7 +257,7 @@ impl State for Login {
             },
             LoginState::Quit => match key.code {
                 KeyCode::Enter => {
-                    app.state = ScreenState::StartUp(StartUp::new());
+                    app.state = ViewState::StartUp(StartUp::new());
                     change_state = true;
                 }
                 KeyCode::Right | KeyCode::Left | KeyCode::Tab => {
@@ -217,7 +276,7 @@ impl State for Login {
                     let res = self.login();
                     match res {
                         Ok((user, ro_records)) => {
-                            app.state = ScreenState::Home(Home::new(
+                            app.state = ViewState::Home(Home::new(
                                 user,
                                 ro_records,
                                 Position::default(),
@@ -246,7 +305,7 @@ impl State for Login {
         }
 
         if !change_state {
-            app.state = ScreenState::Login(self.clone());
+            app.state = ViewState::Login(self.clone());
         }
 
         app

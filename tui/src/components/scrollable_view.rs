@@ -1,16 +1,34 @@
 use ratatui::{
     buffer::Cell,
-    prelude::{Buffer, Rect},
+    prelude::{Buffer, Position as RatatuiPosition, Rect},
     style::{Color, Style},
     widgets::Block,
     widgets::{Borders, Widget},
 };
 
-use crate::{centered_absolute_rect, from, states::home::Position, COLOR_ORANGE, COLOR_WHITE};
+use crate::{centered_absolute_rect, from, views::home::Position, COLOR_ORANGE, COLOR_WHITE};
 
+/// Represents a scrollable view
+///
+/// # Methods
+/// * `check_if_width_out_of_bounds` - Checks if the width is out of bounds
+/// * `inner_buffer_bounding_box` - Returns the inner buffer bounding box
+/// * `render` - Renders the scrollable view
+/// * `render_borders` - Renders the borders
+/// * `render_scrollbars` - Renders the scrollbars
+/// * `render_view` - Renders the view
 pub struct ScrollView {}
 
 impl ScrollView {
+    /// Checks if the width is out of bounds
+    ///
+    /// # Arguments
+    /// * `position` - The position
+    /// * `buffer_to_render` - The buffer to render
+    /// * `area` - The area
+    ///
+    /// # Returns
+    /// `true` if the width is out of bounds, otherwise `false`
     pub fn check_if_width_out_of_bounds(
         position: &Position,
         buffer_to_render: &Buffer,
@@ -23,17 +41,41 @@ impl ScrollView {
         false
     }
 
+    /// Returns the inner buffer bounding box
+    ///
+    /// # Arguments
+    /// * `area` - The area
+    ///
+    /// # Returns
+    /// The inner buffer bounding box
     pub fn inner_buffer_bounding_box(area: Rect) -> (u16, u16) {
         let area = centered_absolute_rect(area, area.width - 4, area.height - 4);
         (area.width - 4, area.height - 3)
     }
 
+    // TODO: area is maybe not needed
+
+    /// Renders the scrollable view
+    ///
+    /// # Arguments
+    /// * `buffer` - The mutable buffer to render to
+    /// * `position` - The position
+    /// * `area` - The area
+    /// * `buffer_to_render` - The buffer to render
     pub fn render(buffer: &mut Buffer, position: &Position, area: Rect, buffer_to_render: &Buffer) {
         let area = ScrollView::render_borders(buffer, area);
         let area = ScrollView::render_scrollbars(buffer, position, area, buffer_to_render);
         ScrollView::render_view(buffer, position, area, buffer_to_render);
     }
 
+    /// Renders the borders
+    ///
+    /// # Arguments
+    /// * `buffer` - The mutable buffer to render to
+    /// * `area` - The area
+    ///
+    /// # Returns
+    /// The inner area
     fn render_borders(buffer: &mut Buffer, area: Rect) -> Rect {
         let b = Block::default()
             .borders(Borders::ALL)
@@ -44,6 +86,16 @@ impl ScrollView {
         Rect::new(area.x + 1, area.y + 1, area.width - 2, area.height - 2)
     }
 
+    /// Renders the scrollbars
+    ///
+    /// # Arguments
+    /// * `buffer` - The mutable buffer to render to
+    /// * `position` - The position
+    /// * `area` - The area
+    /// * `buffer_to_render` - The buffer to render
+    ///
+    /// # Returns
+    /// The inner area
     fn render_scrollbars(
         buffer: &mut Buffer,
         position: &Position,
@@ -136,6 +188,13 @@ impl ScrollView {
         )
     }
 
+    /// Renders the buffer_to_render to the inner buffer
+    ///
+    /// # Arguments
+    /// * `buffer` - The mutable buffer to render to
+    /// * `position` - The position
+    /// * `area` - The area
+    /// * `buffer_to_render` - The buffer to render
     fn render_view(
         buffer: &mut Buffer,
         position: &Position,
@@ -144,7 +203,7 @@ impl ScrollView {
     ) {
         for i in 0 + area.x..area.width + area.x {
             for j in 0 + area.y..area.height + area.y {
-                let cell = buffer_to_render.cell(ratatui::prelude::Position {
+                let cell = buffer_to_render.cell(RatatuiPosition {
                     x: i - area.x + position.offset_x,
                     y: j - area.y + position.offset_y,
                 });
@@ -152,7 +211,7 @@ impl ScrollView {
                     continue;
                 }
                 buffer[(i, j)] = buffer_to_render
-                    .cell(ratatui::prelude::Position {
+                    .cell(RatatuiPosition {
                         x: i - area.x + position.offset_x,
                         y: j - area.y + position.offset_y,
                     })

@@ -10,17 +10,16 @@ use crate::{
         button::{Button, ButtonConfig},
         input::InputConfig,
     },
-    states::{login::Login, register::Register, ScreenState, State},
+    views::{login::Login, register::Register, View, ViewState},
     Application,
 };
 
-#[derive(Clone, PartialEq)]
-enum StartUpState {
-    Login,
-    Register,
-    Quit,
-}
-
+/// Represents the startup buttons
+///
+/// # Variants
+/// * `Login` - The login button
+/// * `Register` - The register button
+/// * `Quit` - The quit button
 #[derive(Debug, Clone)]
 enum StartUpButton {
     Login,
@@ -28,18 +27,53 @@ enum StartUpButton {
     Quit,
 }
 
+/// Represents the startup state
+///
+/// # Variants
+/// * `Login` - The login state
+/// * `Register` - The register state
+/// * `Quit` - The quit state
+#[derive(Clone, PartialEq)]
+enum StartUpState {
+    Login,
+    Register,
+    Quit,
+}
+
+/// Represents the startup view
+///
+/// # Fields
+/// * `state` - The state
+///
+/// # Methods
+/// * `new` - Creates a new `StartUp` view
+/// * `generate_button_config` - Generates a button config
+///
+/// # Implements
+/// * `View` - The view trait
 #[derive(Clone)]
 pub struct StartUp {
     state: StartUpState,
 }
 
 impl StartUp {
+    /// Creates a new `StartUp`
+    ///
+    /// # Returns
+    /// A new `StartUp`
     pub fn new() -> Self {
         StartUp {
             state: StartUpState::Login,
         }
     }
 
+    /// Generates a button config
+    ///
+    /// # Arguments
+    /// * `button` - The button
+    ///
+    /// # Returns
+    /// A button config
     fn generate_button_config(&self, button: StartUpButton) -> ButtonConfig {
         match button {
             StartUpButton::Login => {
@@ -55,7 +89,7 @@ impl StartUp {
     }
 }
 
-impl State for StartUp {
+impl View for StartUp {
     fn render(&self, f: &mut Frame, _app: &Application, rect: Rect) {
         let height = 3 * ButtonConfig::height();
         let width = InputConfig::width();
@@ -91,7 +125,7 @@ impl State for StartUp {
         match self.state {
             StartUpState::Login => match key.code {
                 KeyCode::Enter => {
-                    app.state = ScreenState::Login(Login::new(&app.immutable_app_state.db_path));
+                    app.state = ViewState::Login(Login::new(&app.immutable_app_state.db_path));
                     change_state = true;
                 }
                 KeyCode::Down | KeyCode::Tab | KeyCode::Char('j') => {
@@ -105,7 +139,7 @@ impl State for StartUp {
             StartUpState::Register => match key.code {
                 KeyCode::Enter => {
                     app.state =
-                        ScreenState::Register(Register::new(&app.immutable_app_state.db_path));
+                        ViewState::Register(Register::new(&app.immutable_app_state.db_path));
                     change_state = true;
                 }
                 KeyCode::Down | KeyCode::Tab | KeyCode::Char('j') => {
@@ -131,7 +165,7 @@ impl State for StartUp {
         }
 
         if !change_state {
-            app.state = ScreenState::StartUp(self.clone());
+            app.state = ViewState::StartUp(self.clone());
         }
 
         app

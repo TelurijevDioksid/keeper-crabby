@@ -13,6 +13,12 @@ use crate::{
     Application,
 };
 
+/// Represents the state of the insert master popup
+///
+/// # Variants
+/// * `Master` - The master state
+/// * `Confirm` - The confirm state
+/// * `Quit` - The quit state
 #[derive(Clone)]
 pub enum InsertMasterState {
     Master,
@@ -20,12 +26,31 @@ pub enum InsertMasterState {
     Quit,
 }
 
+/// Represents the exit state of the insert master popup
+///
+/// # Variants
+/// * `Confirm` - The confirm state
+/// * `Quit` - The quit state
 #[derive(Clone, PartialEq)]
 pub enum InsertMasterExitState {
     Confirm,
     Quit,
 }
 
+/// Represents the insert master popup
+///
+/// # Fields
+/// * `master` - The master
+/// * `state` - The state
+/// * `exit_state` - The exit state
+/// * `x_percent` - The x percentage
+/// * `y_percent` - The y percentage
+///
+/// # Methods
+/// * `new` - Creates a new `InsertMaster`
+///
+/// # Implements
+/// * `Popup` - The popup trait
 #[derive(Clone)]
 pub struct InsertMaster {
     pub master: String,
@@ -36,6 +61,10 @@ pub struct InsertMaster {
 }
 
 impl InsertMaster {
+    /// Creates a new insert master popup
+    ///
+    /// # Returns
+    /// A new `InsertMaster`
     pub fn new() -> Self {
         InsertMaster {
             master: String::new(),
@@ -46,10 +75,15 @@ impl InsertMaster {
         }
     }
 
+    /// Appends a character to the master
+    ///
+    /// # Arguments
+    /// * `c` - The character to append
     pub fn master_append(&mut self, c: char) {
         self.master.push(c);
     }
 
+    /// Pops a character from the master
     pub fn master_pop(&mut self) {
         self.master.pop();
     }

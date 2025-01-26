@@ -1,5 +1,13 @@
 use std::path::PathBuf;
 
+/// Represents a configuration for a record operation
+///
+/// # Fields
+/// * `username` - The username
+/// * `master_password` - The master password
+/// * `domain` - The domain
+/// * `password` - The password
+/// * `path` - The path to the data directory
 #[derive(Debug, Clone, PartialEq)]
 pub struct RecordOperationConfig {
     pub username: String,
@@ -10,6 +18,17 @@ pub struct RecordOperationConfig {
 }
 
 impl RecordOperationConfig {
+    /// Creates a new `RecordOperationConfig`
+    ///
+    /// # Arguments
+    /// * `username` - The username
+    /// * `master_password` - The master password
+    /// * `domain` - The domain
+    /// * `password` - The password
+    /// * `path` - The path to the data directory
+    ///
+    /// # Returns
+    /// A new `RecordOperationConfig`
     pub fn new(
         username: &str,
         master_password: &str,

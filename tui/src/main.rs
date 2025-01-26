@@ -6,6 +6,8 @@ use krab_backend::init;
 
 use krab::start;
 
+/// The entry point of the application
+/// Initializes the project directories and starts the application
 fn main() {
     dotenv().ok();
 

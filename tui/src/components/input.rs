@@ -12,6 +12,19 @@ const INPUT_HEIGHT: u16 = 3;
 const MAX_INPUT_WIDTH: u16 = 32;
 const PADDING: u16 = 2;
 
+/// Represents the configuration of an input
+///
+/// # Fields
+/// * `focused` - Indicates if the input is focused
+/// * `value` - The value of the input
+/// * `hidden` - Indicates if the input is hidden
+/// * `title` - The title of the input
+/// * `cursor_position` - The cursor position of the input
+///
+/// # Methods
+/// * `new` - Creates a new `InputConfig`
+/// * `height` - Returns the height of the input
+/// * `width` - Returns the width of the input
 pub struct InputConfig {
     focused: bool,
     value: String,
@@ -20,9 +33,25 @@ pub struct InputConfig {
     cursor_position: Option<u16>,
 }
 
+/// Represents an input
+///
+/// # Methods
+/// * `render` - Renders the input
+/// * `handle_key` - Handles a key event
 pub struct Input {}
 
 impl InputConfig {
+    /// Creates a new `InputConfig`
+    ///
+    /// # Arguments
+    /// * `focused` - Indicates if the input is focused
+    /// * `value` - The value of the input
+    /// * `hidden` - Indicates if the input is hidden
+    /// * `title` - The title of the input
+    /// * `cursor_position` - The cursor position of the input
+    ///
+    /// # Returns
+    /// A new `InputConfig`
     pub fn new(
         focused: bool,
         value: String,
@@ -39,16 +68,30 @@ impl InputConfig {
         }
     }
 
+    /// Returns the height of the input
+    ///
+    /// # Returns
+    /// The height of the input
     pub fn height() -> u16 {
         INPUT_HEIGHT
     }
 
+    /// Returns the width of the input
+    ///
+    /// # Returns
+    /// The width of the input
     pub fn width() -> u16 {
         MAX_INPUT_WIDTH + 2 * PADDING
     }
 }
 
 impl Input {
+    /// Renders the input
+    ///
+    /// # Arguments
+    /// * `buffer` - The mutable buffer to render to
+    /// * `rect` - The rectangle to render the input in
+    /// * `config` - The configuration of the input
     pub fn render(buffer: &mut Buffer, rect: Rect, config: &InputConfig) {
         assert!(rect.height >= INPUT_HEIGHT);
         assert_eq!(config.focused ^ config.cursor_position.is_some(), false);
@@ -124,6 +167,15 @@ impl Input {
         paragraph.render(rect, buffer);
     }
 
+    /// Handles a key event
+    ///
+    /// # Arguments
+    /// * `key` - The key event to handle
+    /// * `config` - The configuration of the input
+    /// * `previous_value` - The previous value of the input
+    ///
+    /// # Returns
+    /// A tuple containing the new value and the new cursor position
     pub fn handle_key(
         key: &KeyEvent,
         config: &InputConfig,

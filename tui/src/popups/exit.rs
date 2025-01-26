@@ -12,6 +12,17 @@ use crate::{
     Application,
 };
 
+/// Represents the exit popup
+///
+/// # Fields
+/// * `x_percent` - The x percentage
+/// * `y_percent` - The y percentage
+///
+/// # Methods
+/// * `new` - Creates a new `Exit`
+///
+/// # Implements
+/// * `Popup` - The popup trait
 #[derive(Clone)]
 pub struct Exit {
     x_percent: u16,
@@ -19,6 +30,10 @@ pub struct Exit {
 }
 
 impl Exit {
+    /// Creates a new exit popup
+    ///
+    /// # Returns
+    /// A new `Exit`
     pub fn new() -> Self {
         Exit {
             x_percent: 50,

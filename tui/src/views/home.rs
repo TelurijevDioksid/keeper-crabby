@@ -19,8 +19,8 @@ use crate::{
         message::MessagePopup,
         Popup,
     },
-    states::{login::Login, State},
-    Application, ScreenState, COLOR_BLACK, COLOR_ORANGE, COLOR_WHITE,
+    views::{login::Login, View},
+    Application, ViewState, COLOR_BLACK, COLOR_ORANGE, COLOR_WHITE,
 };
 
 const DOMAIN_PASSWORD_LIST_ITEM_HEIGHT: u16 = 4;
@@ -29,18 +29,12 @@ const LEFT_PADDING: u16 = 2;
 const MAX_ENTRY_LENGTH: u16 = 32;
 const DOMAIN_PASSWORD_MIDDLE_WIDTH: u16 = 3;
 
-fn hidden_value(domain: String) -> String {
-    assert!(domain.len() <= MAX_ENTRY_LENGTH as usize);
-
-    let mut hidden_value = "  ".to_string() + &domain.clone();
-    hidden_value.push_str(" : ");
-    for _ in 0..MAX_ENTRY_LENGTH {
-        hidden_value.push_str("•");
-    }
-
-    hidden_value
-}
-
+/// Represents the operation over a secret
+///
+/// # Variants
+/// * `Add` - The add operation
+/// * `Remove` - The remove operation
+/// * `Modify` - The modify operation
 #[derive(Debug, Clone, PartialEq)]
 enum Operation {
     Add,
@@ -48,36 +42,90 @@ enum Operation {
     Modify,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-struct NewSecret {
-    domain: String,
-    password: String,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Secrets {
-    pub secrets: Vec<(String, String)>,
-    pub selected_secret: usize,
-    pub shown_secrets: Vec<usize>,
-}
-
+/// Represents the position of the inner buffer
+///
+/// # Fields
+/// * `offset_x` - The x offset
+/// * `offset_y` - The y offset
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Position {
     pub offset_x: u16,
     pub offset_y: u16,
 }
 
+/// Represents the home view
+///
+/// # Fields
+/// * `user` - The user
+/// * `secrets` - Secrets
+/// * `position` - The position of the inner buffer
+/// * `area` - The area of the view
+/// * `new_secret` - The new secret to add if any
+/// * `operation` - The operation to perform if any
+///
+/// # Methods
+///
+/// * `new` - Creates a new `Home`
+/// * `up` - Moves the cursor up
+/// * `down` - Moves the cursor down
+/// * `scroll_to_top` - Scrolls to the top
+/// * `scroll_to_bottom` - Scrolls to the bottom
+/// * `set_selected_secret` - Sets the selected secret
+/// * `toggle_shown_secret` - Toggles the shown secret
+/// * `separator` - Returns a separator
+/// * `current_secret_cursor` - Returns the current secret cursor
+/// * `width` - Returns the width
+/// * `render_secrets` - Renders the secrets
+/// * `render_legend` - Renders the legend
+/// * `buffer_to_render` - Returns the buffer to render
+///
+/// # Implements
+/// * `View` - The view trait
 #[derive(Debug, Clone, PartialEq)]
 pub struct Home {
-    pub user: User,
-    pub secrets: Secrets,
-    pub position: Position,
-    pub area: Rect,
+    user: User,
+    secrets: Secrets,
+    position: Position,
+    area: Rect,
     new_secret: Option<NewSecret>,
     operation: Option<Operation>,
 }
 
+/// Represents a new secret
+///
+/// # Fields
+/// * `domain` - The domain
+/// * `password` - The password
+#[derive(Debug, Clone, PartialEq)]
+struct NewSecret {
+    domain: String,
+    password: String,
+}
+
+/// Represents the secrets
+///
+/// # Fields
+/// * `secrets` - The secrets
+/// * `selected_secret` - The selected secret
+/// * `shown_secrets` - The shown secrets
+#[derive(Debug, Clone, PartialEq)]
+struct Secrets {
+    secrets: Vec<(String, String)>,
+    selected_secret: usize,
+    shown_secrets: Vec<usize>,
+}
+
 impl Home {
+    /// Creates a new `Home`
+    ///
+    /// # Arguments
+    /// * `user` - The user
+    /// * `records` - The read only records
+    /// * `position` - The position
+    /// * `area` - The area
+    ///
+    /// # Returns
+    /// A new `Home` view
     pub fn new(user: User, records: ReadOnlyRecords, position: Position, area: Rect) -> Self {
         let secrets = Secrets {
             secrets: records
@@ -101,6 +149,10 @@ impl Home {
         }
     }
 
+    /// Moves the cursor up
+    ///
+    /// # Arguments
+    /// * `area` - The area
     fn up(&mut self, area: Rect) {
         if self.secrets.selected_secret <= 1 {
             return self.scroll_to_top();
@@ -112,11 +164,19 @@ impl Home {
         )
     }
 
+    /// Scrolls to the top
+    ///
+    /// # Arguments
+    /// * `area` - The area
     fn scroll_to_top(&mut self) {
         self.secrets.selected_secret = 0;
         self.position.offset_y = 0;
     }
 
+    /// Moves the cursor down
+    ///
+    /// # Arguments
+    /// * `area` - The area
     fn down(&mut self, area: Rect) {
         if self.secrets.selected_secret == self.secrets.secrets.len() - 1 {
             self.scroll_to_bottom(area);
@@ -129,6 +189,10 @@ impl Home {
         )
     }
 
+    /// Scrolls to the bottom
+    ///
+    /// # Arguments
+    /// * `area` - The area
     fn scroll_to_bottom(&mut self, area: Rect) {
         let (_, inner_buffer_height) = ScrollView::inner_buffer_bounding_box(area);
         let max_offset_y =
@@ -139,6 +203,15 @@ impl Home {
         self.position.offset_y = max_offset_y;
     }
 
+    /// Sets the selected secret
+    ///
+    /// # Arguments
+    /// * `selected_secret` - The selected secret
+    /// * `previous_selected_secret` - The previous selected secret
+    /// * `area` - The area
+    ///
+    /// # Panics
+    /// If the selected secret is out of bounds
     fn set_selected_secret(
         &mut self,
         selected_secret: usize,
@@ -163,6 +236,10 @@ impl Home {
         self.position = position;
     }
 
+    /// Toggles the shown secret
+    ///
+    /// # Panics
+    /// If the selected secret is out of bounds
     fn toggle_shown_secret(&mut self) {
         assert!(self.secrets.selected_secret < self.secrets.secrets.len());
 
@@ -177,6 +254,13 @@ impl Home {
         self.secrets.shown_secrets = shown_secrets;
     }
 
+    /// Returns a separator
+    ///
+    /// # Arguments
+    /// * `width` - The width of the separator
+    ///
+    /// # Returns
+    /// A ascii separator
     fn separator(&self, width: u16) -> Text {
         let mut separator = String::new();
         for _ in 0..width {
@@ -188,6 +272,16 @@ impl Home {
         )
     }
 
+    /// Returns the current secret cursor
+    ///
+    /// # Arguments
+    /// * `height` - The height of the cursor
+    /// * `width` - The width of the cursor
+    /// * `index` - The index of the secret where the cursor is
+    /// * `style` - The style of the cursor
+    ///
+    /// # Returns
+    /// The current ascii secret with the cursor
     fn current_secret_cursor(&self, height: u16, width: u16, index: u16, style: Style) -> Text {
         let mut cursor = String::new();
         for _ in 0..height {
@@ -203,9 +297,14 @@ impl Home {
                 cursor.push_str("\n");
             }
         }
+
         Text::styled(cursor, style)
     }
 
+    /// Returns the width
+    ///
+    /// # Returns
+    /// The width
     fn width(&self) -> u16 {
         let max_domain_password_width =
             MAX_ENTRY_LENGTH * 2 + LEFT_PADDING + DOMAIN_PASSWORD_MIDDLE_WIDTH;
@@ -218,6 +317,12 @@ impl Home {
         }
     }
 
+    /// Renders the secrets
+    ///
+    /// # Arguments
+    /// * `buffer` - The mutable buffer to render to
+    /// * `cursor_offset` - The cursor offset
+    /// * `y_offset` - The y offset
     fn render_secrets(&self, buffer: &mut Buffer, cursor_offset: u16, y_offset: u16) {
         let mut y = y_offset;
         let mut index = 0;
@@ -254,6 +359,15 @@ impl Home {
         }
     }
 
+    /// Renders the legend
+    ///
+    /// # Arguments
+    /// * `buffer` - The mutable buffer to render to
+    /// * `area` - The area
+    /// * `cursor_offset` - The cursor offset
+    ///
+    /// # Returns
+    /// The y offset
     fn render_legend(&self, buffer: &mut Buffer, area: Rect, cursor_offset: u16) -> u16 {
         let text = " ".repeat(cursor_offset as usize) + 
             "j - down | k - up | h - left | l - right | q - quit | a - add | d - delete selected | e - edit selected | c - copy selected";
@@ -269,6 +383,10 @@ impl Home {
         2
     }
 
+    /// Returns the buffer to render
+    ///
+    /// # Returns
+    /// The buffer to render
     fn buffer_to_render(&self) -> Buffer {
         let cursor_offset = 4;
         let secrets_count = self.secrets.secrets.len();
@@ -286,7 +404,7 @@ impl Home {
     }
 }
 
-impl State for Home {
+impl View for Home {
     fn render(&self, f: &mut Frame, app: &Application, area: Rect) {
         match app.immutable_app_state.rect {
             Some(_) => {
@@ -304,7 +422,7 @@ impl State for Home {
 
         // TODO: rework this
         if key.code == KeyCode::Char('q') {
-            app.state = ScreenState::Login(Login::new(&app.immutable_app_state.db_path));
+            app.state = ViewState::Login(Login::new(&app.immutable_app_state.db_path));
             change_state = true;
         }
         if key.code == KeyCode::Char('j') {
@@ -353,7 +471,7 @@ impl State for Home {
         }
 
         if !change_state {
-            app.state = ScreenState::Home(self.clone());
+            app.state = ViewState::Home(self.clone());
         }
 
         app
@@ -362,11 +480,11 @@ impl State for Home {
     fn handle_insert_record_popup(
         &mut self,
         app: Application,
-        _popup: Box<dyn Popup>,
+        popup: Box<dyn Popup>,
     ) -> Application {
         let domain: String;
         let password: String;
-        let insert_password = _popup.downcast::<InsertDomainPassword>();
+        let insert_password = popup.downcast::<InsertDomainPassword>();
 
         match insert_password {
             Ok(insert_password) => {
@@ -398,7 +516,7 @@ impl State for Home {
 
         let mut app = app.clone();
 
-        app.state = ScreenState::Home(self.clone());
+        app.state = ViewState::Home(self.clone());
 
         app.mutable_app_state
             .popups
@@ -410,10 +528,10 @@ impl State for Home {
     fn handle_insert_master_popup(
         &mut self,
         app: Application,
-        _popup: Box<dyn Popup>,
+        popup: Box<dyn Popup>,
     ) -> Application {
         let master_password: String;
-        let insert_master = _popup.downcast::<InsertMaster>();
+        let insert_master = popup.downcast::<InsertMaster>();
 
         match insert_master {
             Ok(insert_master) => {
@@ -474,7 +592,7 @@ impl State for Home {
                 };
 
                 let mut app = app.clone();
-                app.state = ScreenState::Home(self.clone());
+                app.state = ViewState::Home(self.clone());
                 app
             }
             Some(Operation::Remove) => {
@@ -516,10 +634,29 @@ impl State for Home {
                 };
 
                 let mut app = app.clone();
-                app.state = ScreenState::Home(self.clone());
+                app.state = ViewState::Home(self.clone());
                 app
             }
             Some(Operation::Modify) => app,
         }
     }
+}
+
+/// Returns a hidden value
+///
+/// # Arguments
+/// * `domain` - The domain
+///
+/// # Returns
+/// A hidden value
+fn hidden_value(domain: String) -> String {
+    assert!(domain.len() <= MAX_ENTRY_LENGTH as usize);
+
+    let mut hidden_value = "  ".to_string() + &domain.clone();
+    hidden_value.push_str(" : ");
+    for _ in 0..MAX_ENTRY_LENGTH {
+        hidden_value.push_str("•");
+    }
+
+    hidden_value
 }
